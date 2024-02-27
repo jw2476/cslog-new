@@ -1,5 +1,7 @@
 #set text(font: "JetBrains Mono", size: 10pt)
 
+#outline(indent: 2em)
+
 = Analysis
 
 = Problem and Stakeholders
@@ -423,3 +425,328 @@ I will take an iterative approach to testing where after each feature is impleme
 
 === Schedule View
 Will come up with these once I've decided more about the schedule view
+
+= Implementation
+== Tech Stack
+When making web apps there is a massive choice in frameworks and libraries to help with making reactive websites in JavaScript, such as React, Vue, Svelte, SolidJS, and even new WebAssembly libaries like Leptos and Yew which are both written in Rust. I need my app to load anywhere, including places with slow internet so I need my bundle sizes to be as small as possible, so that means frameworks like React, Vue, Leptos and Yew won't be a good fit as they come with large library bloat. Whereas Svelte and SolidJS both compile away when building the website meaning the bundle will be kept small, and only contain the code I use. I've used Svelte in the past and I want to learn something new so I've chosen to use SolidJS for my frontend library. 
+
+For the backend, I've also chosed SolidJS as I'm planning to use a fullstack framework based on SolidJS called SolidStart, this allows me to write the website frontend and the backend API in one codebase. 
+
+== Authentication
+Since most of the other features depend on authentication, for example the timetable needs an owner, I've chosen to start with it. Firstly, I designed a login and sign up page based on the UI mockups I created earlier:
+
+TODO: SCREENSHOTS
+
+The base HTML code for this is as follows, I've used some prebuilt components from a library called solid-ui and then modified them to my preference:
+```html
+<Card class="mx-auto my-16 max-w-[320px]">
+  <CardHeader>
+    <CardTitle>Sign Up</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <Label for="username">Username</Label>
+    <Input onInput={(e) => set("username", e.target.value)} type="username" id="username" placeholder="Username" autocomplete="username" />
+    <br />
+    <Label for="password">Password</Label>
+    <Input onInput={(e) => set("password", e.target.value)} type="password" id="password" placeholder="Password" autocomplete="new-password" />
+    <br />
+    <Label for="confirm">Confirm Password</Label>
+    <Input onInput={(e) => set("confirm", e.target.value)} type="password" id="confirm" placeholder="Confirm Password" autocomplete="new-password" />
+  </CardContent>
+  <CardFooter>
+    <Button onClick={() => signup()} class="w-full" type="submit">Sign Up</Button>
+  </CardFooter>
+</Card>
+```
+
+The form inputs are all placed into a card element then gives the border around the outside, I've also registered the event functions that update the fields in the JavaScript, as well as the button on click event handler.
+
+Next I had to call the server API for signup when the button was pressed, which I used the following JS:
+```javascript
+const [fields, setFields] = createStore({ username: "", password: "", confirm: "" });
+
+const signup = async () => {
+  // Send POST request to signup with username and password
+  const res = await fetch("/api/signup", {
+    method: "POST",
+    body: JSON.stringify({ username: fields.username, password: fields.password })
+  });
+
+  if (res.status === 409) { // Username conflict
+    setTaken(true);
+    return;
+  }
+
+  if (!res.ok) return; // Return if other failure
+
+  showToast({ title: `Welcome ${fields.username}!`, description: "Going to overview..." }); // Pop up
+
+  const token = await res.text();
+  localStorage.setItem("token", token); // Save token for later
+}
+
+// Clear errors
+const set = (field: "username" | "password" | "confirm", value: string) => { 
+  setFields(field, value); 
+};
+```
+
+This doesn't do any data validation at the moment, but I just want to get something working. The input data is stored in a SolidJS store, which will update any code that uses it when something changes. Next I moved onto the server-side to build up the api route:
+
+For the database, I've decided to use MongoDB as its simple and I can host it online for free, to interface with it I've chosen to use a library called mongoose which allows me to create schemas and easily manage a connection. Before I started on the API route I needed to connect to the database:
+
+```ts
+import mongoose, { Schema } from "mongoose"
+import dotenv from "dotenv"
+
+//get variables from .env
+dotenv.config()
+
+//connect to local mongoose server
+mongoose.connect(process.env.MONGO_URI)
+
+mongoose.connection
+.on("open", () => console.log("Connected to Mongoose"))
+.on("error", (error) => console.log(error))
+
+const userSchema = new Schema({
+    username: String,
+    password: String
+})
+
+export const User = mongoose.model("User", userSchema)
+```
+
+This loads a URI to connect to from my .env file, this means I don't have to hardcode the database URI which will help keep my database secret and allow me to quickly change it later. Once connected it logs a message to the console and creates a User schema which for now just has a username and a password.
+
+Now I have a database to work with, I started to work on the API route:
+
+```ts
+
+const SALT_ROUNDS = 10;
+
+export async function POST({ request }: APIEvent) {
+    const { username, password } = await request.json();
+    if (username == null || password == null) { 
+        return new Response("Missing field", { status: 400 }); 
+    }
+
+    // TODO: Check username is free
+    const existing = await User.findOne({ username });
+    if (existing != null) {
+        console.log(existing);
+        return new Response("Username taken", { status: 409 });
+    }
+
+    const hashed = await bcrypt.hash(password, SALT_ROUNDS);
+
+    const user = new User();
+    user.username = username;
+    user.password = hashed;
+    await user.save();
+
+    const token = jwt.sign({ username }, process.env.JWT_SECRET);
+
+    return new Response(token);
+}
+```
+
+This code gets the username and password out of the incoming request from the frontend, it also checks these both are present before continuing, else it responds with an error code. Then the route queries the database to check there aren't any users with the same username, if there are the route returns a 409 Conflict code and an error will be displayed on the website. Next the password is hashed using bcrypt to ensure no passwords will be leaked in the case of a data breach, this is more secure than standard encryption because hashing is a one way function its very hard to get the password back from the hashed form, even if you have the key used to hash it. This is not true for standard encryption algorithms, as if you have the key most encrypted data can be easily decrypted to get back the original passwords.
+
+Next the user record is created and filled out using the username and the hashed password, and then saved to the database. Finally the username is encoded into a JSON Web Token, which is a nice why of encrypting some data into a token, with an encrypted secret that can be used to confirm the token was issued by the server. The JWT will be used to authenticate the user in other API routes.
+
+=== Signup Testing
+Now that the signup UI has been made and the API route was written, I decided to do a small test to check that the user account is created in the database and the JWT issued is valid.
+
+#table(columns: (auto, auto, auto, auto, auto),
+[*Test Id*], [*Test Title*], [*Expected*], [*Outcome*], [*Fix*],
+[S1], [Sign up with an unused username and password], [Sign up succeeds and returns a auth token], [Record is created in database and token is issued], [],
+[S2], [Sign up with a used username], [Error is raised and user is asked to choose a different username], [API route fails but no error is visibly raised], [Display error in UI],
+[S3], [Sign up with either an empty username or password], [Error is raised and user is asked to fill username and password boxes], [API route fails but no error is visibly raised], [Display error in UI],
+[S4], [Goes to sign up page while already logged in], [User is redirected to overview page], [N/A], []
+)
+
+The API route was working well but the UI was not raising any errors about empty fields or the username being taken, so I decided to add some red labels next to the fields to explain the issue.
+
+```html
+<Label for="username">Username</Label>
+<Input onInput={(e) => set("username", e.target.value)} type="username" id="username" placeholder="Username" autocomplete="username" />
+{empty.username ? <p class="text-red-500">Cannot be empty</p> : <></>}
+{taken() ? <p class="text-red-500">Username taken</p> : <></>}
+<br />
+<Label for="password">Password</Label>
+<Input onInput={(e) => set("password", e.target.value)} type="password" id="password" placeholder="Password" autocomplete="new-password" />
+{empty.password ? <p class="text-red-500">Cannot be empty</p> : <></>}
+<br />
+<Label for="confirm">Confirm Password</Label>
+<Input onInput={(e) => set("confirm", e.target.value)} type="password" id="confirm" placeholder="Confirm Password" autocomplete="new-password" />
+{empty.confirm ? <p class="text-red-500">Cannot be empty</p> : <></>}
+{mismatch() ? <p class="text-red-500">Passwords do not match</p> : <></>}
+```
+
+This UI toggles error labels if different values are set when processing the submit request. Next I needed to write the JS code to toggle the values depending on the issue with the users input:
+
+```js
+const [empty, setEmpty] = createStore({ username: false, password: false, confirm: false });
+const [mismatch, setMismatch] = createSignal(false);
+const [taken, setTaken] = createSignal(false);
+
+...
+
+    let error = false;
+    
+    // Username empty
+    if (fields.username == "") {
+      setEmpty("username", true);
+      error = true;
+    }
+
+    // Password empty
+    if (fields.password == "") {
+      setEmpty("password", true);
+      error = true;
+    }
+
+    // Confirm password empty
+    if (fields.confirm == "") {
+      setEmpty("confirm", true);
+      error = true;
+    }
+
+    // Mismatch
+    if (fields.password != fields.confirm) {
+      setMismatch(true);
+      error = true;
+    }
+
+    if (error) return;
+
+    // Send POST request to signup with username and password
+    const res = await fetch("/api/signup", {
+      method: "POST",
+      body: JSON.stringify({ username: fields.username, password: fields.password })
+    });
+
+    if (res.status === 409) { // Username conflict
+      setTaken(true);
+      return;
+    }
+
+    ...
+```
+
+This code raises errors if any of the fields are empty, or if the passwords don't match, or if the username is taken and shows a red label in the UI.
+
+TODO: SCREENSHOTS
+
+=== Signup Error Testing
+#table(columns: (auto, auto, auto, auto, auto),
+[*Test Id*], [*Test Title*], [*Expected*], [*Outcome*], [*Fix*],
+[S1], [Sign up with an unused username and password], [Sign up succeeds and returns a auth token], [Record is created in database and token is issued], [],
+[S2], [Sign up with a used username], [Error is raised and user is asked to choose a different username], [API route fails and error appears in UI], [],
+[S3], [Sign up with either an empty username or password], [Error is raised and user is asked to fill username and password boxes], [API route fails and error appears in UI], [],
+[S4], [Goes to sign up page while already logged in], [User is redirected to overview page], [N/A], []
+)
+
+With the sign in page success criteria fully met, except for S4 which depends on the overview page, I decided to move onto the login page
+
+=== Login
+Firstly I took the signup UI and duplicated it as I thought it would be easier to modify it into a login view:
+
+```html
+<Card class="mx-auto my-16 max-w-[320px]">
+  <CardHeader>
+    <CardTitle>Login</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <Label for="username">Username</Label>
+    <Input onInput={(e) => set("username", e.target.value)} type="username" id="username" placeholder="Username" autocomplete="username" />
+    {empty.username ? <p class="text-red-500">Cannot be empty</p> : <></>}
+    {incorrect() ? <p class="text-red-500">Incorrect username or password</p> : <></>}
+    <br />
+    
+    <Label for="password">Password</Label>
+    <Input onInput={(e) => set("password", e.target.value)} type="password" id="password" placeholder="Password" autocomplete="new-password" />
+    {empty.password ? <p class="text-red-500">Cannot be empty</p> : <></>}
+    {incorrect() ? <p class="text-red-500">Incorrect username or password</p> : <></>}
+  </CardContent>
+  <CardFooter>
+    <Button onClick={() => login()} class="w-full" type="submit">Login</Button>
+  </CardFooter>
+</Card>
+```
+
+This is very similar to the signup UI with the confirm password input removed and the error messages changed slightly, next I moved onto the verification login and sending the request to the server:
+
+```js
+const [empty, setEmpty] = createStore({ username: false, password: false });
+const [fields, setFields] = createStore({ username: "", password: "" });
+const [incorrect, setIncorrect] = createSignal(false);
+
+const login = async () => {
+  let error = false;
+
+  if (fields.username == "") {
+    setEmpty("username", true);
+    error = true;
+  }
+
+  if (fields.password == "") {
+    setEmpty("password", true);
+    error = true;
+  }
+
+  if (error) return;
+
+  const res = await fetch("/api/login", {
+    method: "POST",
+    body: JSON.stringify({ username: fields.username, password: fields.password })
+  });
+
+  if (res.status === 401) { 
+    setIncorrect(true);
+    return;
+  }
+
+  if (!res.ok) return;
+  
+  showToast({ title: `Welcome ${fields.username}!`, description: "Going to overview..." });
+  const token = await res.text();
+  localStorage.setItem("token", token);
+}
+
+const set = (field: "username" | "password", value: string) => { 
+  setFields(field, value); 
+  setEmpty(field, false); 
+};
+```
+
+With the frontend page finished, I moved onto the API route. It needs to get the user record from the database using the username from the request, and then compare the hashed password with the password from the request. If the username and the password is correct, then a JWT is generated similar to the signup API and returned to the frontend:
+
+```js
+export async function POST({ request }: APIEvent) {
+    const {username, password} = await request.json();
+
+    const user = await User.findOne({username});
+    if (!await bcrypt.compare(password, user.password)) {
+        return new Response("Incorrect username or password", {status: 401})
+    }
+
+    const token = jwt.sign({username}, process.env.JWT_SECRET);
+    return new Response(token)
+}
+```
+
+With login route finished I decided to test it:
+
+=== Login Testing
+#table(columns: (auto, auto, auto, auto, auto),
+[*Test Id*], [*Test Title*], [*Expected*], [*Outcome*], [*Fix*],
+[L1], [Log in with a correct username and password], [Login succeeds and returns a auth token], [As expected], [],
+[L2], [Log in with a username that does not exist], [Error is raised and user is asked to sign up], [As expected], [],
+[L3], [Log in with a correct username and invalid password], [Error is raised and user is asked to recheck their password], [As expected], [],
+[L4], [Log in with either an empty username or password], [Error is raised and user is asked to fill username and password boxes], [As expected], [],
+[L5], [Goes to log in page while already logged in], [User is redirected to overview page], [N/A], []
+)
+
+All tests passed except for the one that requires the overview page, which is what I decided to work on next.
