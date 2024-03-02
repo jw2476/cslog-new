@@ -750,3 +750,283 @@ With login route finished I decided to test it:
 )
 
 All tests passed except for the one that requires the overview page, which is what I decided to work on next.
+
+== Move to SvelteKit
+While developing the overview page, I kept running into strange issues where API routes would return HTML of other pages instead of running the API route, for instance `/api/signup` would sometimes return the HTML of the page for sign up. After researching a bit I found that this was a bug within solid-start, the framework I was using, and that it was in early access and very unstable, I tried to find a way to work around this most of them meant iterating would take too long as I'd have to run a release build every time or I'd have to move out the server-side into a different program, which defeated the purpose of a full-stack framework. With this is mind I decided to switch to SvelteKit, another full-stack framework, but this time using Svelte instead of SolidJS. I already had some experience with SvelteKit so it was quite quick to rebuild authentication in it:
+
+I decided to use a library called superforms which made the verifcation of forms and handling all the accessibility and error messages for me, which made the code a lot shorter and simpler:
+
+login/+page.ts
+```svlt
+<script lang="ts">
+	// Imports omitted
+	export let data: SuperValidated<Infer<Schema>>;
+
+	const form = superForm(data, {
+		validators: zodClient(schema)
+	});
+
+	const { form: formData, enhance, message } = form;
+
+	message.subscribe((token) => {
+		toast('Logged in');
+	});
+</script>
+
+<Card class="mx-[40vw] my-16 p-16">
+	<form method="POST" use:enhance>
+		<Form.Field {form} name="username">
+			<Form.Control let:attrs>
+				<Form.Label>Username</Form.Label>
+				<Input {...attrs} bind:value={$formData.username} />
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+		<Form.Field {form} name="password">
+			<Form.Control let:attrs>
+				<Form.Label>Password</Form.Label>
+				<Input {...attrs} bind:value={$formData.password} type="password" />
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+		<br />
+		<Form.Button>Log In</Form.Button>
+	</form>
+</Card>
+<Toaster />
+```
+
+Sign up was nearly exactly the same but with some different labels, so I won't show the code. When the form is submitted it calls a server action, which can be handled in the routes `+page.server.ts` file.
+
+Here's the handling code for login:
+
+login/+page.server.ts
+```ts
+// Import omitted
+
+export const actions: Actions = {
+    default: async (event) => {
+        const form = await superValidate(event, zod(schema));
+        if (!form.valid) {
+            return fail(400, {
+                form,
+            });
+        }
+
+        let user = await db.query.users.findFirst({ where: eq(users.username, form.data.username) });
+        if (user == null) {
+            return setError(form, "username", "User not found");
+        }
+
+        if (!await compare(form.data.password, user.password)) {
+            return setError(form, "password", "Incorrect password");
+        }
+
+        let token = jwt.sign(form.data.username, JWT_SECRET);
+
+        return message(form, token);
+    },
+};
+```
+
+This is nearly identical to the previous version, the data is validated and the passwords are compared, if they match then a JWT is returned to the client. The only big change here is that I decided to swap my database manager from mongoose which uses MongoDB, to drizzle-orm which uses SQL, mainly because the query syntax is very similar to SQL and I wanted to get some practice in for my exam, but also because its a lot faster and lighter than mongoose. It also has the added benefit of being fully type safe which means I can catch database errors early.
+
+The handling for signup is also very similar:
+
++page.server.ts
+```ts
+// Imports omitted
+
+const SALT_ROUNDS = 10;
+
+export const actions: Actions = {
+    default: async (event) => {
+        const form = await superValidate(event, zod(schema));
+        if (!form.valid) {
+            return fail(400, {
+                form,
+            });
+        }
+
+        let hashed = await hash(form.data.password, SALT_ROUNDS);
+
+        if (await db.query.users.findFirst({
+            where: eq(users.username, form.data.username)
+        })) {
+            return setError(form, "username", "Username taken");
+        }
+
+        await db
+            .insert(users)
+            .values({ username: form.data.username, password: hashed });
+
+        console.log("Created user");
+        let token = jwt.sign(form.data.username, JWT_SECRET);
+
+        return message(form, token);
+    },
+};
+```
+
+Now that I've moved to a more stable framework, I could finally move onto the tasks view:
+
+=== Signup Error Testing
+#table(columns: (auto, auto, auto, auto, auto),
+[*Test Id*], [*Test Title*], [*Expected*], [*Outcome*], [*Fix*],
+[S1], [Sign up with an unused username and password], [Sign up succeeds and returns a auth token], [Record is created in database and token is issued], [],
+[S2], [Sign up with a used username], [Error is raised and user is asked to choose a different username], [API route fails and error appears in UI], [],
+[S3], [Sign up with either an empty username or password], [Error is raised and user is asked to fill username and password boxes], [API route fails and error appears in UI], [],
+[S4], [Goes to sign up page while already logged in], [User is redirected to overview page], [N/A], []
+)
+
+=== Login Testing
+#table(columns: (auto, auto, auto, auto, auto),
+[*Test Id*], [*Test Title*], [*Expected*], [*Outcome*], [*Fix*],
+[L1], [Log in with a correct username and password], [Login succeeds and returns a auth token], [As expected], [],
+[L2], [Log in with a username that does not exist], [Error is raised and user is asked to sign up], [As expected], [],
+[L3], [Log in with a correct username and invalid password], [Error is raised and user is asked to recheck their password], [As expected], [],
+[L4], [Log in with either an empty username or password], [Error is raised and user is asked to fill username and password boxes], [As expected], [],
+[L5], [Goes to log in page while already logged in], [User is redirected to overview page], [N/A], []
+)
+
+== Tasks
+This time I decided to start with the API routes instead of the frontend, as I knew I was going to need all CRUD (Create Read Update Delete) methods on tasks. I started with the GET route:
+
+api/tasks/+server.ts
+```ts
+export async function GET({ cookies }) {
+    const token = cookies.get("token");
+    if (token == null) {
+        return error(401);
+    }
+
+    let tasks = getTasks(token);
+
+    if (typeof tasks == "number") {
+        return error(tasks);
+    }
+
+    return new Response(JSON.stringify(tasks));
+}
+```
+
+I decided to split out the majority of the logic into a separate getTasks function as I knew that was going to be used in different places such as scheduling and the GET route:
+
+```ts
+export async function getTasks(token: string): Promise<Array<Task> | number> {
+    let username = await jwt.verify(token, JWT_SECRET);
+    if (typeof username != "string") { return 400; }
+    let user = await db.query.users.findFirst({
+        with: {
+            tasks: true
+        },
+        where: eq(users.username, username)
+    });
+
+    if (user == null) {
+        return 404;
+    }
+
+    return user.tasks;
+}
+```
+
+This function verifies the JWT to get the username, which is then uses to run a query for all tasks belonging to the user, if the username is invalid the function returns a 404, if the JWT is invalid the function returns a 400 client error, if everything is successful the function returns the list of tasks belonging to the user.
+
+Next I decided to implement the POST route which will be used to create the tasks, it takes a task structure from the requests body, as well as the token located in the users cookies, to create the task in the database:
+
+```ts
+export async function POST({ request, cookies }) {
+    let { deadline, duration, title } = await request.json();
+    let deadlineDate = new Date(deadline);
+    const token = cookies.get("token");
+    if (token == null) {
+        return error(401);
+    }
+
+    let username = await jwt.verify(token, JWT_SECRET);
+    if (typeof username != "string") { return error(400, "Bad token"); }
+    const user = await db.query.users.findFirst({ where: eq(users.username, username) });
+    if (user == null) {
+        return error(404);
+    }
+
+    const task = await db.insert(tasks).values({ deadline: deadlineDate, duration, title, user_id: user.id }).returning({ id: tasks.id });
+
+    return new Response(JSON.stringify({ id: task[0].id }));
+}
+```
+
+If the token is not set then a 401 unauthorised code is returned, if the username is invalid then a 404 not found is returned, else the primary key of the task is returned, this is so the user can manipulate the task later using that primary key.
+
+Next I made the PATCH route, which updates a task:
+
+```ts
+export async function PATCH({ request, cookies }) {
+    const { id, deadline, duration, title } = await request.json();
+    let deadlineDate = new Date(deadline);
+
+    const token = cookies.get("token");
+    if (token == null) {
+        return error(401);
+    }
+
+    let username = await jwt.verify(token, JWT_SECRET);
+    if (typeof username != "string") { return error(400, "Bad token"); }
+    const user = await db.query.users.findFirst({ where: eq(users.username, username) });
+    if (user == null) {
+        return error(404);
+    }
+
+    const task = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
+    if (task == null) {
+        return error(404);
+    }
+
+    if (task.user_id != user.id) {
+        return error(401);
+    }
+
+    await db.update(tasks).set({ deadline: deadlineDate, duration, title }).where(eq(tasks.id, id));
+
+    return new Response();
+}
+```
+
+This route takes a the primary key of the task the user wants to edit, as well as the new data to update the task to. The task is found from the database to verify that it belongs to the authenticating user, if it does then the task is updated and the route returns successfully.
+
+Finally was the DELETE route, which deletes a task using its primary key:
+
+```ts
+export async function DELETE({ request, cookies }) {
+    const { id } = await request.json();
+    const token = cookies.get("token");
+    if (token == null) {
+        return error(401);
+    }
+
+    let username = await jwt.verify(token, JWT_SECRET);
+    if (typeof username != "string") { return error(400, "Bad token"); }
+    const user = await db.query.users.findFirst({ where: eq(users.username, username) });
+    if (user == null) {
+        return error(404);
+    }
+
+    const task = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
+    if (task == null) {
+        return error(404);
+    }
+
+    if (task.user_id != user.id) {
+        return error(401);
+    }
+
+    await db.delete(tasks).where(eq(tasks.id, id));
+
+    return new Response();
+}
+```
+
+As with the PATCH route, the task is fetched before the operating to verify the task belongs to the authenticated user, if it does then the task is deleted.
+
+With the task manipulation API routes written I decided to move onto the website UI. 
