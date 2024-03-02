@@ -1029,4 +1029,491 @@ export async function DELETE({ request, cookies }) {
 
 As with the PATCH route, the task is fetched before the operating to verify the task belongs to the authenticated user, if it does then the task is deleted.
 
-With the task manipulation API routes written I decided to move onto the website UI. 
+With the task manipulation API routes written I decided to move onto the website UI. As I was still using the svelte-shadcn component library, I had a look at the easiest way to display a grid of information, and I came across the table component, I thought it looked really nice and did everything I wanted to do so I made the decision to center my UI around it. I started by mocking up a basic table with to display information how I wanted:
+
+
+```ts
+<script lang="ts">
+	export let data;
+	let tasks = writable(data.tasks);
+
+	let staging: Task = { deadline: new Date(Date.now()), duration: 0, title: '', id: 0 };
+
+	function duration(duration: number): string {
+		function pad(data: string): string {
+			if (data.length == 1) {
+				return data + '0';
+			} else {
+				return data;
+			}
+		}
+
+		let hours = Math.floor(duration / 3600);
+		let minutes = Math.floor((duration % 3600) / 60);
+
+		return `${hours}:${pad(minutes.toString())}`;
+	}
+
+	function deadline(deadline: Date): string {
+		console.log(deadline);
+		if (deadline.toDateString() == new Date(Date.now()).toDateString()) {
+			return `${deadline.getHours()}:${deadline.getMinutes()}`;
+		} else {
+			return `${deadline.getDate()}-${deadline.getMonth()}-${deadline.getFullYear()}`;
+		}
+	}
+</script>
+
+<Card.Root class="m-16 px-16 pb-16 pt-4">
+	<Card.Header>
+		<Card.Title class="cols-span-9 text-center text-5xl">Tasks</Card.Title>
+	</Card.Header>
+	<Card.Root>
+		<Table.Root>
+			<Table.Header>
+				<Table.Row>
+					<Table.Head>Title</Table.Head>
+					<Table.Head>Duration</Table.Head>
+					<Table.Head>Deadline</Table.Head>
+				</Table.Row>
+			</Table.Header>
+			<Table.Body>
+				{#each $tasks as task}
+					<Table.Row>
+						<Table.Cell>{task.title}</Table.Cell>
+						<Table.Cell>{duration(task.duration)}</Table.Cell>
+						<Table.Cell>{deadline(task.deadline)}</Table.Cell>
+					</Table.Row>
+				{/each}
+			</Table.Body>
+		</Table.Root>
+	</Card.Root>
+</Card.Root>
+```
+
+The array of tasks is stored in one of svelte's writable stores, they allow me to control the reactivity of the tasks array so I can force the UI to update when I come to updating the information. I can do this by calling the `update` function on the store, which rerenders all the UI using the store after changing the value.
+
+Next I needed to add some buttons in order to interact with the task table, I started with an edit and delete button which I placed in a column to the right.
+
+```svlt
+<Card.Root class="m-16 px-16 pb-16 pt-4">
+	<Card.Header>
+		<Card.Title class="cols-span-9 text-center text-5xl">Tasks</Card.Title>
+	</Card.Header>
+	<Card.Root>
+		<Table.Root>
+			<Table.Header>
+				<Table.Row>
+					<Table.Head>Title</Table.Head>
+					<Table.Head>Duration</Table.Head>
+					<Table.Head>Deadline</Table.Head>
+          <Table.Head class="px-8 text-right">Actions</Table.Head>
+				</Table.Row>
+			</Table.Header>
+			<Table.Body>
+				{#each $tasks as task}
+					<Table.Row>
+						<Table.Cell>{task.title}</Table.Cell>
+						<Table.Cell>{duration(task.duration)}</Table.Cell>
+						<Table.Cell>{deadline(task.deadline)}</Table.Cell>
+            <Table.Cell class="text-right">
+							<Button variant="outline" size="icon">
+								<Pencil class="h-4 w-4" />
+							</Button>
+							<Button variant="destructive" size="icon">
+								<Trash class="h-4 w-4" />
+							</Button>
+						</Table.Cell>
+					</Table.Row>
+				{/each}
+			</Table.Body>
+		</Table.Root>
+	</Card.Root>
+</Card.Root>
+```
+
+With the buttons in place, I now needed to make them do something, I decided the delete button would be the easiest to implement first as it didn't need a form.
+
+```ts
+<script lang="ts">
+  ...
+
+  async function deleteTask(task: Task) {
+		await fetch('/api/tasks', { method: 'DELETE', body: JSON.stringify({ id: task.id }) });
+		tasks.update((tasks) => {
+			tasks.splice(data.tasks.indexOf(task), 1);
+			return tasks;
+		});
+	}
+</script>
+
+...
+							<Button variant="destructive" size="icon" on:click={() => deleteTask(task)}>
+								<Trash class="h-4 w-4" />
+							</Button>
+...
+```
+
+Next was the task editting/creation UI, I decided to put it all in a dialog box that pops up when you press the edit/create buttons. Because this was going to be a standalone component, I decided to break it up into its own file:
+
+```ts
+<script lang="ts">
+	export let task: Task;
+  
+	let title: string;
+	let hours: number, minutes: number;
+	let deadlineDate: DateValue, deadlineHours: number, deadlineMinutes: number;
+	let open: bool = false;
+
+	function start() {
+		title = task.title;
+		hours = task.duration / 3600;
+		minutes = (task.duration % 3600) / 60;
+		deadlineDate = fromDate(task.deadline, 'Europe/London');
+		deadlineHours = task.deadline.getHours();
+		deadlineMinutes = task.deadline.getMinutes();
+	}
+
+	async function submit() {
+		let duration = hours * 3600 + minutes * 60;
+		let deadline = deadlineDate.toDate('Europe/London');
+		deadline.setHours(deadlineHours);
+		deadline.setMinutes(deadlineMinutes);
+		task = { title, duration, deadline, id: task.id };
+		await fetch('/api/tasks', { method: 'PATCH', body: JSON.stringify(task) });
+		open = false;
+	}
+</script>
+
+<Dialog.Root bind:open>
+	<Dialog.Trigger class={buttonVariants({ variant: 'outline' })} on:click={start}>
+		<slot />
+	</Dialog.Trigger>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title class="text-center">Edit task</Dialog.Title>
+		</Dialog.Header>
+		<div class="grid gap-4 py-4">
+			<div class="grid grid-cols-5 items-center gap-4">
+				<Label for="title" class="text-right">Title</Label>
+				<Input id="title" bind:value={title} class="col-span-4" />
+			</div>
+			<div class="grid grid-cols-5 items-center gap-4">
+				<Label for="duration" class="text-right">Duration</Label>
+				<Input id="hours" bind:value={hours} class="col-span-2" />
+				<Input id="minutes" bind:value={minutes} class="col-span-2" />
+			</div>
+			<div class="grid grid-cols-5 items-center gap-4">
+				<Label for="duration" class="text-right">Deadline</Label>
+				<DatePicker bind:value={deadlineDate} class="col-span-4" />
+			</div>
+			<div class="grid grid-cols-5 items-center gap-4">
+				<p />
+				<Input id="hours" bind:value={deadlineHours} class="col-span-2" />
+				<Input id="minutes" bind:value={deadlineMinutes} class="col-span-2" />
+			</div>
+		</div>
+		<Dialog.Footer>
+			<Button type="submit" on:click={submit}>Save</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+```
+
+This Svelte code creates a dialog popup and a trigger button, the popup is a full form including a date picker for the deadline, and several inputs for title, duration minutes and hours, and deadline minutes and hours. I used HTML grids in order to align and structure the form to keep it easy to use and aesthetic.
+
+Another thing to note is that instead of directly modifying the task passed into the component, I instead read out the task's values and copy them to other variables, which are modified instead, this is so the original task isn't modified until the request is send, after which the values are copied back into the task. Originally, I tried to modify the original and keep a backup to restore to if the request failed, but I switched to this method as it was simpler.
+
+I did a quick test at this point to check deletion and editting were working correctly, to do this I filled the database with mock data and used the UI to edit them.
+
+=== Task Editing and Deletion Testing
+#table(columns: (auto, auto, auto, auto),
+[*Test Id*], [*Test Title*], [*Expected*], [*Outcome*],
+[E1], [Delete button pressed], [Task deleted and schedule regenerated], [Task deleted and UI updated],
+[E2], [Title editted to a non-empty value], [Task title changed], [Failed due to server error],
+[E3], [Title editted to an empty value], [Error message appears saying tasks must have a title], [Failed due to server error],
+[E4], [Deadline editted], [Task deadline changed, schedule regenerated], [Failed due to server error],
+[E5], [Duration editted to a non-zero value], [Task duration changed, schedule regenerated], [Failed due to server error],
+[E6], [Duration editted to a zero], [Error appears saying tasks must have a duration], [Failed due to server error],
+[E7], [Priority changed], [Task priority changed, schedule regenerated], [N/A as there is no priority yet],
+) 
+
+All of the tests other than deletion failed due to a server error: "value.toUTCString is not a function" being raised from within my PostgreSQL driver. This meant I had an issue with handling the deadline Date object on the edit API route, taking a look at the request body, the deadline was being represented as a UTC string rather than an actual Date object, which is what the server was expecting. To fix this I needed to either make the server parse the UTC string, or use a different format which the server could easily parse. Parsing a UTC timedate string is very slow and not in the JS standard library, so I decided to search for a exchange format, I found the `Date.getTime()` function which returns the number of seconds since the 1970 epoch, similar to the UNIX timestamp used in UNIX derivates. This meant that it was just a simple number I could send in the request body, and it could easily be turned back into a Date object, in fact its constructor takes one of these values. So with a bit of modification I should be able to fix the issue:
+
+api/tasks/+server.ts
+```ts
+export async function PATCH({ request, cookies }) {
+    const { id, deadline, duration, title } = await request.json();
+    let deadlineDate = new Date(deadline);
+
+    ...
+
+    await db.update(tasks).set({ deadline: deadlineDate, duration, title }).where(eq(tasks.id, id));
+
+    return new Response();
+}
+```
+
+tasks/Edit.svelte
+```ts
+async function submit() {
+	let duration = hours * 3600 + minutes * 60;
+	let deadline = deadlineDate.toDate('Europe/London');
+	deadline.setHours(deadlineHours);
+	deadline.setMinutes(deadlineMinutes);
+	task = { title, duration, deadline, id: task.id };
+  const body = {
+		deadline: task.deadline.getTime(), // Changed
+		duration: task.duration,
+		title: task.title,
+		id: task.id
+	};
+	await fetch('/api/tasks', { method: 'PATCH', body: JSON.stringify(body) }); // Changed
+	open = false;
+}
+```
+
+With this done I reran the test suite:
+#table(columns: (auto, auto, auto, auto),
+[*Test Id*], [*Test Title*], [*Expected*], [*Outcome*],
+[E1], [Delete button pressed], [Task deleted and schedule regenerated], [Task deleted and UI updated],
+[E2], [Title editted to a non-empty value], [Task title changed], [Task title changed],
+[E3], [Title editted to an empty value], [Error message appears saying tasks must have a title], [Changed to empty title],
+[E4], [Deadline editted], [Task deadline changed, schedule regenerated], [Task deadline changed],
+[E5], [Duration editted to a non-zero value], [Task duration changed, schedule regenerated], [Task duration changed],
+[E6], [Duration editted to a zero], [Error appears saying tasks must have a duration], [Client error],
+[E7], [Priority changed], [Task priority changed, schedule regenerated], [N/A as there is no priority yet],
+) 
+
+This shows the core functionality is working, and all I had left was some validation, to do this I used zod again, but without superforms this time:
+
+```ts
+let schema = z.object({
+	hours: z.number().min(0),
+	minutes: z.number().min(0).max(60),
+	deadlineHours: z.number().min(0),
+	deadlineMinutes: z.number().min(0).max(60),
+	deadlineDate: z.date(),
+	title: z.string().min(1)
+});
+
+const result = schema.safeParse({ hours, minutes, deadlineHours, deadlineMinutes, deadlineDate: deadlineDate.toDate('Europe/London'), title });
+if (!result.success) {
+  console.log(result.error.issues)
+  issues = result.error.issues.map(issue => `${issue.path[0]}: ${issue.message}`);
+  return
+}
+```
+
+The errors are not the best since I'm not using superforms, at somepoint I'll probably go back and fix this but for now it works well. As part of this I also made a NumericInput component, which is like an input but it only lets you input digits:
+
+NumericInput.svelte
+```ts
+<script lang="ts">
+	import { Input } from '$lib/components/ui/input';
+
+	let className: string | null | undefined = undefined;
+	export let value: number;
+  let text: string
+	export { className as class };
+
+	function check() {
+		let c = text[text.length - 1];
+		if (c < '0' || c > '9') {
+			text = text.substring(0, text.length - 2);
+		} else {
+        value = parseInt(text);
+    }
+	}
+</script>
+
+<Input class={className} bind:value={text} on:input={check} />
+```
+
+I replaced the standard Input component with these, meaning the hours and minutes fields were already guarenteed to be numeric. With validation done I decided to rerun the test suite:
+
+#table(columns: (auto, auto, auto, auto),
+[*Test Id*], [*Test Title*], [*Expected*], [*Outcome*],
+[E1], [Delete button pressed], [Task deleted and schedule regenerated], [Task deleted and UI updated],
+[E2], [Title editted to a non-empty value], [Task title changed], [Task title changed],
+[E3], [Title editted to an empty value], [Error message appears saying tasks must have a title], [Error message appears saying tasks must have a title],
+[E4], [Deadline editted], [Task deadline changed, schedule regenerated], [Task deadline changed],
+[E5], [Duration editted to a non-zero value], [Task duration changed, schedule regenerated], [Task duration changed],
+[E6], [Duration editted to a zero], [Error appears saying tasks must have a duration], [Error appears saying tasks must have a duration],
+[E7], [Priority changed], [Task priority changed, schedule regenerated], [N/A as there is no priority yet],
+)
+
+With all test passing I was happy with the editting UI, so I decided to work on generalising it to work with both the creation form and the editting form, firstly I made the form title an input, as well as taking an effect callback which takes the task from the form and does something with it:
+
+```
+<script lang="ts">
+  ...
+
+  export let dialogTitle: string;
+	export let callback: (task: Task) => void;
+
+  async function submit() {
+		let schema = z.object({
+			hours: z.number().min(0),
+			minutes: z.number().min(0).max(60),
+			deadlineHours: z.number().min(0),
+			deadlineMinutes: z.number().min(0).max(60),
+			deadlineDate: z.date(),
+			title: z.string().min(1)
+		});
+
+		const result = schema.safeParse({ hours, minutes, deadlineHours, deadlineMinutes, deadlineDate: deadlineDate.toDate('Europe/London'), title });
+		if (!result.success) {
+            console.log(result.error.issues)
+            issues = result.error.issues.map(issue => `${issue.path[0]}: ${issue.message}`);
+            return
+		}
+
+		let duration = hours * 3600 + minutes * 60;
+		let deadline = deadlineDate.toDate('Europe/London');
+		deadline.setHours(deadlineHours);
+		deadline.setMinutes(deadlineMinutes);
+		task = { title, duration, deadline, id: task.id };
+		callback(task);
+		open = false;
+	}
+
+  ...
+</script>
+
+    ...
+
+    <Dialog.Header>
+			<Dialog.Title class="text-center">{dialogTitle}</Dialog.Title>
+		</Dialog.Header>
+
+    ...
+```
+
+With that I added the create button at the top of the page, created a patchTask and createTask function, and wired up the new generic UI:
+
+```ts
+<script lang="ts">
+	export let data;
+	let tasks = writable(data.tasks);
+
+	let staging: Task = { deadline: new Date(Date.now()), duration: 0, title: '', id: 0 };
+
+	function duration(duration: number): string {
+		function pad(data: string): string {
+			if (data.length == 1) {
+				return data + '0';
+			} else {
+				return data;
+			}
+		}
+
+		let hours = Math.floor(duration / 3600);
+		let minutes = Math.floor((duration % 3600) / 60);
+
+		return `${hours}:${pad(minutes.toString())}`;
+	}
+
+	function deadline(deadline: Date): string {
+		console.log(deadline);
+		if (deadline.toDateString() == new Date(Date.now()).toDateString()) {
+			return `${deadline.getHours()}:${deadline.getMinutes()}`;
+		} else {
+			return `${deadline.getDate()}-${deadline.getMonth()}-${deadline.getFullYear()}`;
+		}
+	}
+
+	async function deleteTask(task: Task) {
+		await fetch('/api/tasks', { method: 'DELETE', body: JSON.stringify({ id: task.id }) });
+		tasks.update((tasks) => {
+			tasks.splice(data.tasks.indexOf(task), 1);
+			return tasks;
+		});
+	}
+
+	async function patchTask(task: Task) {
+		const body = {
+			deadline: task.deadline.getTime(),
+			duration: task.duration,
+			title: task.title,
+			id: task.id
+		};
+		await fetch('/api/tasks', { method: 'PATCH', body: JSON.stringify(body) });
+	}
+
+	async function createTask(task: Task) {
+		const body = { deadline: task.deadline.getTime(), duration: task.duration, title: task.title };
+		let res = await fetch('/api/tasks', { method: 'POST', body: JSON.stringify(body) });
+		task.id = (await res.json()).id;
+		tasks.update((tasks) => {
+			tasks.push(task);
+			return tasks;
+		});
+	}
+</script>
+
+<Card.Root class="m-16 px-16 pb-16 pt-4">
+	<Card.Header>
+		<Card.Title class="cols-span-9 text-center text-5xl">Tasks</Card.Title>
+		<br />
+		<Edit callback={createTask} bind:task={staging} dialogTitle="Create task">
+			<Plus class="h-4 w-4" />
+		</Edit>
+	</Card.Header>
+	<Card.Root>
+		<Table.Root>
+			<Table.Header>
+				<Table.Row>
+					<Table.Head class="text-center">Title</Table.Head>
+					<Table.Head class="text-center">Duration</Table.Head>
+					<Table.Head class="text-center">Deadline</Table.Head>
+					<Table.Head class="px-8 text-right">Actions</Table.Head>
+				</Table.Row>
+			</Table.Header>
+			<Table.Body>
+				{#each $tasks as task}
+					<Table.Row>
+						<Table.Cell class="text-center">{task.title}</Table.Cell>
+						<Table.Cell class="text-center">{duration(task.duration)}</Table.Cell>
+						<Table.Cell class="text-center">{deadline(task.deadline)}</Table.Cell>
+						<Table.Cell class="text-right">
+							<Edit callback={patchTask} dialogTitle="Edit task" bind:task>
+								<Pencil class="h-4 w-4" />
+							</Edit>
+							<Button variant="destructive" size="icon" on:click={() => deleteTask(task)}>
+								<Trash class="h-4 w-4" />
+							</Button>
+						</Table.Cell>
+					</Table.Row>
+				{/each}
+			</Table.Body>
+		</Table.Root>
+	</Card.Root>
+</Card.Root>
+```
+
+With this done I reran the test suite for the whole page:
+
+#table(columns: (auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*],
+[T1], [Go to page], [Valid], [See a list of all tasks], [See a list of all tasks],
+[T2], [Click on any task], [Valid], [Opens task edit UI], [Opens task edit UI],
+[T3], [Overview button pressed], [Valid], [Goes to overview page], [N/A],
+[T4], [Task list button pressed], [Valid], [Does nothing], [N/A],
+[T5], [Schedule button pressed], [Valid], [Goes the schedule view page], [N/A],
+)
+
+#table(columns: (auto, auto, auto, auto),
+[*Test Id*], [*Test Title*], [*Expected*], [*Outcome*],
+[E1], [Delete button pressed], [Task deleted and schedule regenerated], [Task deleted and UI updated],
+[E2], [Title editted to a non-empty value], [Task title changed], [Task title changed],
+[E3], [Title editted to an empty value], [Error message appears saying tasks must have a title], [Error message appears saying tasks must have a title],
+[E4], [Deadline editted], [Task deadline changed, schedule regenerated], [Task deadline changed],
+[E5], [Duration editted to a non-zero value], [Task duration changed, schedule regenerated], [Task duration changed],
+[E6], [Duration editted to a zero], [Error appears saying tasks must have a duration], [Error appears saying tasks must have a duration],
+[E7], [Priority changed], [Task priority changed, schedule regenerated], [N/A as there is no priority yet],
+)
+
+All passed as expected, so next I moved onto the schedule generation and overview page:
+
+== Schedule Generation
