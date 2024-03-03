@@ -1517,3 +1517,5 @@ With this done I reran the test suite for the whole page:
 All passed as expected, so next I moved onto the schedule generation and overview page:
 
 == Schedule Generation
+
+Bugs: Turns out JS Date.getTime() returns milliseconds instead of seconds like the UNIX timestamp
