@@ -1543,7 +1543,7 @@ function nextDay(time: string, day: Date): Date {
     day_copy.setMinutes(minutes);
     day_copy.setSeconds(0);
     day_copy.setMilliseconds(0);
-    return new Date(day_copy.getTime() + 24 * 3600 * 1000);
+    return new Date(day_copy.getTime() + 24 * 3600);
 }
 
 export function generateSchedule(user: User, tasks: Array<Task>): Array<ScheduledTask> {
@@ -1553,12 +1553,12 @@ export function generateSchedule(user: User, tasks: Array<Task>): Array<Schedule
     sorted.forEach(task => {
         const next_day = nextDay(user.start, start);
         const day_end = end(user.end, start);
-        if (day_end.getTime() < (start.getTime() + task.duration * 1000)) { // If the task would finish after the day's ended, move it to the beginning of the next day
+        if (day_end.getTime() < (start.getTime() + task.duration)) { // If the task would finish after the day's ended, move it to the beginning of the next day
             start = next_day;
         }
 
         schedule.push({ start, task }); // Add the task to the schedule
-        start =  new Date(start.getTime() + task.duration * 1000); // Advance the start time by the task's duration
+        start =  new Date(start.getTime() + task.duration); // Advance the start time by the task's duration
     });
     return schedule;
 }
@@ -1577,4 +1577,614 @@ export const users = pgTable('users', {
 
 I chose the `time` field type as it only needs to store the time of day, not the date or a specific time stamp, this also meant the exact time of day could be represented in a much cheaper way. I decided to make the defaults for these values 9am till 5pm, inline with the standard working hours in the UK. Since I had modified table columns I had to regenerate migrations and apply them to the database, after that was done I filled the database with some mock data and decided to generate a test schedule. 
 
+I created 3 tasks, a 15 minutes task due first, then a 40 minute task, then a 1 hour long task. It was 4pm at the time so I only had an hour left for the scheduler to place tasks, the expected output was that the both the 15 and 40 minute tasks would be scheduled for today, and the 1 hour one would be scheduled for the beginning of tomorrow. After a quick test I could see this wasn't working as expected, all 3 tasks were scheduled for today with odd durations and start times. After digging through the `generateSchedule` function, I found that the `Date.getTime` function actually returns the number of milliseconds since the UNIX epoch, rather than seconds like UNIX timestamps, this meant I was adding duration in milliseconds, despite the fact the value represented seconds, this meant each task took 0.1% of the time it should, and to fix it I'd need to multiply duration by 1000 to convert it to milliseconds:
+
 Bugs: Turns out JS Date.getTime() returns milliseconds instead of seconds like the UNIX timestamp
+
+```ts
+export function generateSchedule(user: User, tasks: Array<Task>): Array<ScheduledTask> {
+    const sorted: Array<Task> = tasks.sort((a, b) => a.deadline.getTime() - b.deadline.getTime());
+    let start: Date = new Date(Date.now());
+    let schedule: Array<ScheduledTask> = [];
+    sorted.forEach(task => {
+        const next_day = nextDay(user.start, start);
+        const day_end = end(user.end, start);
+        if (day_end.getTime() < (start.getTime() + task.duration * 1000)) { // If the task would finish after the day's ended, move it to the beginning of the next day
+            start = next_day;
+        }
+
+        schedule.push({ start, task }); // Add the task to the schedule
+        start =  new Date(start.getTime() + task.duration * 1000); // Advance the start time by the task's duration
+    });
+    return schedule;
+}
+```
+
+With this fixed I reran the function and this time it the correct schedule, so I moved onto the overview page. Referring back to the design I made earlier, I decided the easiest way to make this UI would be to use a mixture of CSS flex and grid, two things I wasn't very familiar with at the time, so I did a bit of research on how to use them with #link("https://tailwindcss.com/docs/flex")[TailwindCSS]. With that I made the overview page, which started with the server side function fetching the schedule.
+
+```ts
+export async function load({ cookies }) {
+    const token = cookies.get("token");
+    if (token == null) {
+        return error(401);
+    }
+
+    const user = await getUser(token);
+    if (typeof user == "number") {
+        return error(user);
+    }
+
+    const tasks = await getTasks(user);
+    if (typeof tasks == "number") {
+        return error(tasks);
+    }
+
+    const schedule = await generateSchedule(user, tasks);
+
+    return { schedule };
+}
+```
+
+This function will be run on the server when the page is accessed, it gets the username out of the token and authenticates the user, the user id is then used to get the list of tasks, which is then used to generate the schedule. Finally the schedule is returned to be used by the Svelte component:
+
+```ts
+<script lang="ts">
+	export let data; // Return value of server-side function will be stored here
+
+	let schedule: Array<ScheduledTask> = data.schedule;
+  $: schedule = data.schedule;
+	let current: ScheduledTask | undefined;
+	let next: Array<ScheduledTask> = [];
+
+  // Constantly check whether current or next tasks need changing
+	onMount(() => {
+		setInterval(setCurrent, 1000);
+		setInterval(setNext, 1000);
+	});
+
+	function setCurrent() {
+		current = schedule.find((task, a, b) => {
+			let now = Date.now();
+			let start = task.start.getTime();
+			let end = task.start.getTime() + task.task.duration * 1000;
+			return start <= now && now <= end;
+		});
+	}
+
+	function setNext() {
+		next = schedule
+			.sort((a, b) => a.start.getTime() - b.start.getTime())
+			.filter((task) => task.start.getTime() > Date.now());
+	}
+
+	function timeUntil(task: ScheduledTask): string {
+    let between = task.start.getTime() - Date.now();
+    return formatDuration(between / 1000);
+  }
+</script>
+
+<div class="p-8 md:p-16 lg:mx-[15vw] lg:grid lg:grid-cols-3 lg:gap-4">
+	<div class="flex flex-col items-stretch gap-4 lg:col-span-2">
+		{#if current}
+			<Task description="Current" task={current} />
+		{:else}
+			<Card.Root class="p-16">
+				<Card.Header>
+					<Card.Title class="text-center text-5xl">Nothing to do!</Card.Title>
+				</Card.Header>
+			</Card.Root>
+		{/if}
+		<div class="grid gap-4 max-lg:grid-rows-2 lg:grid-cols-2">
+			<Button.Root class="p-8 text-xl lg:p-16 lg:text-3xl">Complete</Button.Root>
+			<Button.Root class="p-8 text-xl lg:p-16 lg:text-3xl">Snooze</Button.Root>
+		</div>
+		{#if next[0]}
+			<Task description={`Next in ${timeUntil(next[0])}`} task={next[0]} />
+		{:else}
+			<Card.Root class="p-16">
+				<Card.Header>
+					<Card.Title class="text-center text-5xl">Nothing upcoming</Card.Title>
+				</Card.Header>
+			</Card.Root>
+		{/if}
+		<Button.Root class="p-16 text-3xl">Take a break</Button.Root>
+	</div>
+	<div class="hidden grid-rows-4 gap-4 lg:grid">
+    {#each next.slice(1, 4) as task}
+		  <Task description={`Next in ${timeUntil(task)}`} task={task} />
+    {/each}
+	</div>
+</div>
+```
+
+This component creates the UI from the design section successfully, and it also scales correctly for mobile usage:
+
+TODO: PC Overview UI
+TODO: Mobile Overview UI
+
+One thing I encountered while making the page is that displaying task information was something needed in many places, so I decided to abstract it into a separate component:
+
+```ts
+<script lang="ts">
+    export let task: ScheduledTask;
+    export let description: string;
+    
+    function duration(): string {
+        return formatDuration(task.task.duration);
+    }
+    function deadline(): string {
+        const value = task.task.deadline;
+        return `${value.getDate()}/${value.getMonth()}/${value.getFullYear()}`
+    }
+</script>
+
+<Card.Root>
+    <Card.Header>
+        <Card.Title class="text-center text-5xl">{task.task.title}</Card.Title>
+        <Card.Description class="text-center">{description}</Card.Description>
+    </Card.Header>
+    <Card.Footer class="lg:px-16">
+        <div class="flex grow justify-between">
+            <div class="flex grow justify-start gap-2">
+                <Clock />
+                {duration()}
+            </div>
+            <div class="flex grow justify-end gap-2">
+                <Calendar />
+                {deadline()}
+            </div>
+        </div>
+    </Card.Footer>
+</Card.Root>
+```
+
+The Task component takes a task and description as input, and displays the task's title, duration and deadline. The usage is shown in the overview page.
+
+With the UI done, the next step was to add some functionality to the buttons, snooze and take a break both required features I haven't added to the scheduling algorithm yet, so I started with the complete button.
+
+The complete button when pressed needs to check if there is a current task, if there is it should be deleted from the database and the schedule should be regenerated:
+
+```ts
+async function complete() {
+    if (current == undefined) return;
+    await fetch("/api/tasks", { method: "DELETE", body: JSON.stringify({ id: current.task.id }) });
+    await invalidateAll();
+}
+```
+
+This uses the tasks API I made earlier to delete the task from its ID, and the `invalidateAll` function refetched the data calculated during the server-side `load` function, which since that is how the page fetched the schedule, it will update it. At this point I decided to do a run of the overview page's tests:
+
+=== Overview Testing
+#table(columns: (auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*],
+[O1], [Go to page while there is a current task], [Page shows current task, remaining time, and other information], [Page shows information correctly],
+[O2], [Go to page while there is not a current task], [Page shows there is no task and shows the next upcoming task], [Page shows information correctly],
+[O3], [Complete button pressed while there is a current task], [Completes the task, regenerates schedule and updates page], [Task is deleted and schedule is updated],
+[O4], [Complete button pressed while there is no current task], [Errors saying there is no ongoing task], [No effect],
+[O5], [Snooze button pressed while there is a current task], [Snoozes the task, regenerates the schedule and updates page], [No effect],
+[O6], [Snooze button pressed while there is no current task], [Errors saying there is no ongoing task], [No effect],
+[07], [Break button pressed], [Pop up prompting for break duration], [No effect],
+[O8], [Duration entered into break popup], [Clears all task for the entered duration, regenerates schedule and updates the page], [No effect],
+[O9], [Task list button pressed], [Goes to task list page], [N/A],
+[O10], [Schedule list button pressed], [Goes to schedule view page], [N/A],
+[O11], [Overview button pressed], [Nothing happens], [N/A],
+[O12], [Any task pressed], [Task edit UI appears], [Removing],
+)
+
+O1 through O3 were successful, however O4 failed as I have not yet implemented an error message, O5-O11 fail expectedly as the buttons either have no functionality, or don't exist. When speaking to stakeholders, we decided the ability to click on any task to edit it was not helpful, and would make the website hard to use on mobile platforms, so I have decided to remove O12 from the tests.
+
+With testing completed, everything implemented so far was working correctly, however I still had to implement the snooze and take a break feature. However while testing, despite everything working correctly, there was some odd behaviour. Since the schedule was generated at page load, it would change every time a user would reload the page, or access it on another device. This meant that a users schedule would be inconsistent across devices, which isn't especially easy to follow. To address this I decided to make schedules persistent and only regenerate them when the user's task list is modified. To start I had to modify the task schema:
+
+```ts
+export const tasks = pgTable('tasks', {
+    id: serial('id').primaryKey(),
+    title: text('title').notNull(),
+    duration: integer('duration').notNull(),
+    scheduled: timestamp('scheduled'), // New
+    deadline: timestamp('deadline', { withTimezone: true }).notNull(),
+    user_id: integer('user_id').references(() => users.id)
+});
+```
+
+I added an optional column, the scheduled time. This column would be used to store the scheduled time when the schedule was generated, meaning the `generateSchedule` function had to be modified:
+
+```ts
+export async function generateSchedule(user: User, tasks: Array<Task>) {
+    const sorted: Array<Task> = tasks.sort((a, b) => a.deadline.getTime() - b.deadline.getTime());
+    let start: Date = new Date(Date.now());
+    sorted.forEach(task => {
+        const next_day = nextDay(user.start, start);
+        const day_end = end(user.end, start);
+        if (day_end.getTime() < (start.getTime() + task.duration * 1000)) { // If the task would finish after the day's ended, move it to the beginning of the next day
+            start = next_day;
+        }
+
+        task.scheduled = start; // New, schedule in this task
+        (async () => await db.update(schema.tasks).set({ scheduled: start }).where(eq(schema.tasks.id, task.id)))(); // New, update database to include scheduled time
+        start = new Date(start.getTime() + task.duration * 1000); // Advance the start time by the task's duration
+    });
+}
+```
+
+Now the schedule was persistent I had to update the overview page load function to fetch the schedule from the database instead of generating it at load time, this meant returning the task list, since tasks now contained the time they were scheduled for:
+
+```ts
+export async function load({ cookies }) {
+    const token = cookies.get("token");
+    if (token == null) {
+        return error(401);
+    }
+
+    const user = await getUser(token);
+    if (typeof user == "number") {
+        return error(user);
+    }
+
+    const tasks = await getTasks(user);
+    if (typeof tasks == "number") {
+        return error(tasks);
+    }
+
+    return { tasks };
+}
+```
+
+Finally I needed to move the schedule regeneration to whenever the task list was modified, which currently was only in the `/api/tasks` API:
+
+```ts
+export async function POST({ request, cookies }) {
+  ...
+
+  const taskList = await getTasks(user);
+  if (typeof taskList === "number") {
+      return error(taskList);
+  }
+  await generateSchedule(user, taskList);
+
+  ...
+}
+
+export async function DELETE({ request, cookies }) {
+  ...
+
+  const taskList = await getTasks(user);
+  if (typeof taskList === "number") {
+      return error(taskList);
+  }
+  await generateSchedule(user, taskList);
+
+  ...
+}
+
+export async function PATCH({ request, cookies }) {
+  ...
+
+  const taskList = await getTasks(user);
+  if (typeof taskList === "number") {
+      return error(taskList);
+  }
+  await generateSchedule(user, taskList);
+
+  ...
+}
+```
+
+With this done, I decided to retest the overview page just to double check I didn't break anything:
+#table(columns: (auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*],
+[O1], [Go to page while there is a current task], [Page shows current task, remaining time, and other information], [Page shows information correctly],
+[O2], [Go to page while there is not a current task], [Page shows there is no task and shows the next upcoming task], [Page shows information correctly],
+[O3], [Complete button pressed while there is a current task], [Completes the task, regenerates schedule and updates page], [Task is deleted and schedule is updated],
+[O4], [Complete button pressed while there is no current task], [Errors saying there is no ongoing task], [No effect],
+[O5], [Snooze button pressed while there is a current task], [Snoozes the task, regenerates the schedule and updates page], [No effect],
+[O6], [Snooze button pressed while there is no current task], [Errors saying there is no ongoing task], [No effect],
+[07], [Break button pressed], [Pop up prompting for break duration], [No effect],
+[O8], [Duration entered into break popup], [Clears all task for the entered duration, regenerates schedule and updates the page], [No effect],
+[O9], [Task list button pressed], [Goes to task list page], [N/A],
+[O10], [Schedule list button pressed], [Goes to schedule view page], [N/A],
+[O11], [Overview button pressed], [Nothing happens], [N/A],
+[O12], [Any task pressed], [Task edit UI appears], [Removing],
+)
+Everything seemed to be working as before, except with persistent schedules so I could finally move onto the take a break feature.
+
+=== Take a Break
+Currently since I didn't have a way of forcing tasks to start after a certain time, I decided to just create a task with a high deadline priority when making a break. The task will have the duration specified and a deadline such that it will be scheduled for the first task:
+
+```ts
+<script lang="ts">
+  let breakHours: number = 0;
+  let breakMinutes: number = 0;
+
+  async function takeBreak() {
+    let duration = breakHours * 3600 + breakMinutes * 60;
+    let deadline = new Date(Date.now() + duration * 1000);
+    let title = "Break";
+    await fetch("/api/tasks", { method: "POST", body: JSON.stringify({ duration, deadline, title }) }); 
+    await invalidateAll();
+  }
+</script>
+
+...
+
+<NumericInput bind:value={breakHours} />
+<NumericInput bind:value={breakMinutes} />
+<Button.Root class="text-xl" on:click={takeBreak}>Take a break</Button.Root>
+
+...
+```
+
+I decided to put the break hours and minutes inputs directly on the page rather than behind a popup, mainly to make it easier and more obvious how to enter the information, but also to simplify the UI. With the take a break feature working, there was only one other feature that didn't need start times, which was repeated tasks.
+
+=== Repeat Tasks
+To start with I had to add another column to the `tasks` table, the repeat column, which would specify the interval between repeats in days:
+```ts
+export const tasks = pgTable('tasks', {
+    id: serial('id').primaryKey(),
+    title: text('title').notNull(),
+    duration: integer('duration').notNull(),
+    scheduled: timestamp('scheduled'),
+    repeat: integer('repeat'),
+    deadline: timestamp('deadline', { withTimezone: true }).notNull(),
+    user_id: integer('user_id').references(() => users.id)
+});
+```
+
+The column is nullable, as a null value would mean the task is unrepeated. A value of 0 days is also treated as a one-time task. With the field in the database, I next moved onto changing the task edit UI to allow the user to enter a repeat interval:
+
+```ts
+<div class="grid grid-cols-5 items-center gap-4">
+	<Label for="duration" class="text-right">Repeat</Label>
+	<NumericInput bind:value={repeat} class="col-span-2" />
+	<Label for="duration" class="col-span-2 text-left">Days</Label>
+</div>
+```
+
+This added another row to the form grid, I decided to display the units of the interval to make it clear to the user that the unit used is days.
+TODO: Screenshot
+
+Now tasks were able to be set to repeat, I needed to reschedule repeat tasks when they are completed, rather than deleting them like I am currently. Since this meant I could no longer just use `DELETE /api/tasks` I decided to make a new API route `/api/complete` which would handle the completion of a task:
+
+api/complete/+server.ts
+```ts
+export async function POST({ request, cookies }) {
+    const { id } = await request.json();
+    const token = cookies.get("token");
+    if (token == null) {
+        return error(401);
+    }
+
+    let username = await jwt.verify(token, JWT_SECRET);
+    if (typeof username != "string") { return error(400, "Bad token"); }
+    const user = await db.query.users.findFirst({ where: eq(users.username, username) });
+    if (user == null) {
+        return error(404);
+    }
+
+    const task = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
+    if (task == null) {
+        return error(404);
+    }
+
+    if (task.user_id != user.id) {
+        return error(401);
+    }
+
+    if (task.repeat) {
+        await db.update(tasks).set({ deadline: new Date(task.deadline.getTime() + task.repeat * (24 * 3600 * 1000)) }).where(eq(tasks.id, task.id));
+    } else {
+        await db.delete(tasks).where(eq(tasks.id, task.id));
+    }
+
+    const taskList = await getTasks(user);
+    if (typeof taskList === "number") {
+        return error(taskList);
+    }
+    await generateSchedule(user, taskList);
+
+    return new Response()
+}
+```
+
+With this I changed the complete button to use the new API route instead of the DELETE method:
+
+```ts
+async function complete() {
+	if (current == undefined) return;
+	await fetch('/api/complete', { method: 'POST', body: JSON.stringify({ id: current.id }) });
+  await sleep(500);
+	await invalidateAll();
+}
+```
+
+I also added a sleep to the function, as I found the schedule wasn't being regenerated before it was being refetched so the change wasn't observed. While a 500ms delay does make the refresh take longer it was a lot more reliable.
+
+=== Start After
+I finally had to bite the bullet and implement the start after feature. I needed a way of specifying that tasks couldn't be started until after a certain time, for example I wouldn't be able to do my maths lesson until it was time for it. To start I modified the `tasks` table again to add the start after field:
+
+```ts
+export const tasks = pgTable('tasks', {
+    id: serial('id').primaryKey(),
+    title: text('title').notNull(),
+    duration: integer('duration').notNull(),
+    scheduled: timestamp('scheduled'),
+    repeat: integer('repeat'),
+    startAfter: timestamp('start_after').notNull(), // New
+    deadline: timestamp('deadline', { withTimezone: true }).notNull(),
+    user_id: integer('user_id').references(() => users.id)
+});
+```
+
+Like the repeat feature, I needed to update the task edit UI to add the new field:
+
+```ts
+<script lang="ts">
+  let startDate: DateValue, startHours: number, startMinutes: number;
+
+  ...
+</script>
+
+<div class="grid grid-cols-5 items-center gap-4">
+	<Label for="duration" class="text-right">Start After</Label>
+	<DatePicker bind:value={startDate} class="col-span-4" />
+</div>
+<div class="grid grid-cols-5 items-center gap-4">
+	<p />
+	<NumericInput bind:value={startHours} class="col-span-2" />
+	<NumericInput bind:value={startMinutes} class="col-span-2" />
+</div>
+```
+
+I chose an identical design to the deadline input in order to be consistent with my timestamp inputs. After tweaking some parts to make sure it was being send to and recieved by the server, I was able to create tasks with an earliest start time, next I needed to update the schedule generation algorithm to take these times into account, for now I went with the simplest approach of just setting the current time to the start after time if the current time was too early:
+
+```ts
+export async function generateSchedule(user: User, tasks: Array<Task>) {
+    const sorted: Array<Task> = tasks.sort((a, b) => a.deadline.getTime() - b.deadline.getTime());
+    let start: Date = new Date(Date.now());
+    sorted.forEach(task => {
+        const next_day = nextDay(user.start, start);
+        const day_end = end(user.end, start);
+        if (day_end.getTime() < (start.getTime() + task.duration * 1000)) { // If the task would finish after the day's ended, move it to the beginning of the next day
+            start = next_day;
+        }
+        
+        // New
+        if (start.getTime() < task.startAfter.getTime()) {
+            start = task.startAfter;
+        }
+
+        task.scheduled = start; // Schedule in this task
+        (async () => await db.update(schema.tasks).set({ scheduled: start }).where(eq(schema.tasks.id, task.id)))();
+        start = new Date(start.getTime() + task.duration * 1000); // Advance the start time by the task's duration
+    });
+}
+```
+
+While this meant there were a lot more holes in the timetable, it did work correctly and allowed me to schedule tasks such as lessons which had to be in a fixed time. Finally I needed to update the complete API to update the start after time for repeated tasks, for instance if I have a maths lesson at 10am every week on Mondays, after its finished I want the start after time to become the start of next week's lesson:
+
+```ts
+  ...
+
+  if (task.repeat) {
+      await db.update(tasks).set({ 
+          startAfter: new Date(task.startAfter.getTime() + task.repeat * (24 * 3600 * 1000)),
+          deadline: new Date(task.deadline.getTime() + task.repeat * (24 * 3600 * 1000)) 
+      }).where(eq(tasks.id, task.id));
+  } else {
+      await db.delete(tasks).where(eq(tasks.id, task.id));
+  }
+  
+  ...
+```
+
+With this feature implement, not only was I able to schedule fixed tasks, I was finally able to implement the snooze feature!
+
+=== Snoozing
+
+I decided to implement snoozing by changing the current task's start after time to one hour after the current time, meaning it would be rescheduled for an hours time at the earliest. This meant snoozing was as simple as:
+
+```ts
+<script lang="ts">
+  async function snooze() {
+    if (!current) { return; }
+    current.startAfter = new Date(current.startAfter.getTime() + (3600 * 1000));
+
+    const body = {
+      startAfter: current.startAfter.getTime(),
+		  deadline: current.deadline.getTime(),
+		  duration: current.duration,
+		  title: current.title,
+		  id: current.id,
+		  repeat: current.repeat
+	  };
+
+    await fetch('/api/tasks', { method: 'PATCH', body: JSON.stringify(body) });
+    await sleep(500);
+	  await invalidateAll();
+  }
+</script>
+
+...
+
+<Button.Root class="p-8 text-xl lg:p-16 lg:text-3xl" on:click={snooze}>Snooze</Button.Root>
+
+...
+```
+
+With all of the buttons working in theory, I decided to do another full test of the overview page:
+#table(columns: (auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*],
+[O1], [Go to page while there is a current task], [Page shows current task, remaining time, and other information], [Page shows information correctly],
+[O2], [Go to page while there is not a current task], [Page shows there is no task and shows the next upcoming task], [Page shows information correctly],
+[O3], [Complete button pressed while there is a current task], [Completes the task, regenerates schedule and updates page], [Task is deleted and schedule is updated],
+[O4], [Complete button pressed while there is no current task], [Errors saying there is no ongoing task], [No effect],
+[O5], [Snooze button pressed while there is a current task], [Snoozes the task, regenerates the schedule and updates page], [Snoozes the task and schedule is updates],
+[O6], [Snooze button pressed while there is no current task], [Errors saying there is no ongoing task], [No effect],
+[07], [Break button pressed], [Pop up prompting for break duration], [Inputs work correctly],
+[O8], [Duration entered into break popup], [Clears all task for the entered duration, regenerates schedule and updates the page], [Clears all tasks and updates schedule],
+[O9], [Task list button pressed], [Goes to task list page], [N/A],
+[O10], [Schedule list button pressed], [Goes to schedule view page], [N/A],
+[O11], [Overview button pressed], [Nothing happens], [N/A],
+)
+ 
+All features were working except for error messages, the app was nearly finished! To do a proper test and get some feedback I deployed the app and asked my stakeholders to sign up for an account and test it out. I left them for a few hours to wait for feedback and these were the results:
+
+#table(columns: (auto, auto), 
+[*Feedback*], [*Decisions*],
+[Difficult to navigate], [Create navigation bar with buttons that go to all important pages],
+[Signup/Login pages don't go anywhere if successful], [Create redirects on success that sends the user to the overview page],
+[Have to go to tasks page to add task], [Introduce add task button onto new navbar]
+)
+
+=== Navigation
+The majority of the feedback I recieved was that navigating around the pages was too difficult. To fix this I've decided to add a navigation bar at the top of all pages with buttons to all of the major pages on the site:
+
+```html
+<div class="flex justify-between border-b p-4">
+	<div class="flex items-start gap-4">
+		<Button href="/">Overview</Button>
+		<Button href="/tasks">Tasks</Button>
+	</div>
+	{#if authed}
+		<Button on:click={logout}>Log Out</Button>
+	{:else}
+		<div class="flex items-end gap-4">
+			<Button href="/login">Log In</Button>
+			<Button href="/signup">Sign Up</Button>
+		</div>
+	{/if}
+</div>
+```
+
+TODO: Screenshot
+
+I decided to give the navbar two model, authenticated and unauthenticated, which will change the right hand buttons from Logout to Login+Signup respectively. The navbar's variant will be set on each page, the pages that require the user to be authenticated will show the navbar in the authenticated variant. 
+
+As well as the navbar I decided to implement different automatic redirects to try and guide the user to the correct page:
+
+If logged in:
+#table(columns: (auto, auto), [*From*], [*To*], [Signup], [Overview], [Login], [Overview])
+
+If logged out:
+#table(columns: (auto, auto), [*From*], [*To*], [Overview], [Login], [Tasks], [Login])
+
+The login and signup forms also redirect to the overview page if they were successful.
+
+This meant it was much harder to get lost on a page because the user wasn't authenticated.
+Finally I also added a new API route, `/api/logout` that allowed the user to log out:
+
+```ts
+export async function GET({ cookies }) {
+    cookies.delete("token", { path: "/" });
+
+    return new Response();
+}
+```
+
+All the route does is delete the user's `token` cookie, meaning the client will look like it hasn't logged in, meaning it will be redirected to the login page.
+
+With those changes made I updated the deployment and asked the stakeholders for feedback, they said the website was much easier to use than before. 2 of the 3 pieces of feedback I was given had been addressed, so I moved onto adding the new add task button onto the navbar.
+
+=== Extra Add Task Button
+=== Reminder Notifications
+=== PWAs
+=== Testing Phase
