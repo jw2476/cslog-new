@@ -167,10 +167,10 @@ Finally, there will be no way to get a data dump of your task list to backup or 
 #image("decomp.png")
 === Frontend
 #image("frontend.png")
-This shows the different pages and operations I will need to implement on the frontend, I chose this as my  
+This shows the different pages and operations I will need to implement on the frontend, I chose to break down the project into pages and the flow on each page as they are a natural way of breaking up web apps. I also split the project into frontend (client-side) and backend (server-side), this is because the code will not be able to be shared between them easily, so its important to work out where each feature belongs.
 === Backend
 #image("backend.png")
-This shows the different API routes I will need to implement on the backend, these will be used by the frontend. I've left out the scheduling algorithm as I cover it properly below
+This shows the different API routes I will need to implement on the backend, these will be used by the frontend. I've left out the scheduling algorithm as I cover it properly below in the algorithms section. I decomposed the needed APIs by operation so each route only had one thing to worry about, this would make it easy to reuse the APIs across the project in a modular way.
 
 #pagebreak()
 
