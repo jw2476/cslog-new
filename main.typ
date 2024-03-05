@@ -1563,5 +1563,18 @@ export function generateSchedule(user: User, tasks: Array<Task>): Array<Schedule
     return schedule;
 }
 ```
+I decided to put the start and end times in the user database record, this means that eventually I could implement a user configuration page where the user can choose when their scheduled day starts and ends. However this mean I had to modify my databse schema for the user table:
+
+```ts
+export const users = pgTable('users', {
+    id: serial('id').primaryKey(),
+    username: text('username').notNull(),
+    password: text('password').notNull(),
+    start: time('start').notNull(),
+    end: time('end').notNull()
+});
+```
+
+I chose the `time` field type as it only needs to store the time of day, not the date or a specific time stamp, this also meant the exact time of day could be represented in a much cheaper way. I decided to make the defaults for these values 9am till 5pm, inline with the standard working hours in the UK. Since I had modified table columns I had to regenerate migrations and apply them to the database, after that was done I filled the database with some mock data and decided to generate a test schedule. 
 
 Bugs: Turns out JS Date.getTime() returns milliseconds instead of seconds like the UNIX timestamp
