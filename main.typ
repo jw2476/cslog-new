@@ -195,7 +195,7 @@ This will pop up from the bottom of the screen whenever the user click on a task
 #table(columns: (auto, auto),
 [*Feature*], [*Justification*],
 [Large user interface], [As I found in my survey, the main target platform will be mobile devices. To make UIs easy to use on devices with smaller screens things like buttons need to be much larger than on desktop so the user can easily click on them. The same is true for text and inputs.],
-[Simple user interface], [The UI needs to be simple and intuitive to use so the user can easily learn how to use the website. Simple UIs also are easier to use for younger children or older people, although these aren't a huge part of my target audience.].
+[Simple user interface], [The UI needs to be simple and intuitive to use so the user can easily learn how to use the website. Simple UIs also are easier to use for younger children or older people, although these aren't a huge part of my target audience.],
 [Colour coded buttons], [All buttons will be a bright colour to make it clear that they are buttons rather then information, and that the user can interact with this. This is helpful because it separates interactables from the rest of the UI, making it easier to use.],
 [Input validation], [When the user is inputting data, it needs to be clear how to input the data correctly, and not let them enter invalid data. This can be done with validation and good error messages if invalid data is entered.],
 [Icons], [Icons can demonstrate meaning easily without needing lots of work, for instance a calendar next to a date could show a deadline, or a clock next to a time would likely mean duration. Using icons means the UI will be easier and more intuitive to use],
