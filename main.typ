@@ -167,10 +167,10 @@ Finally, there will be no way to get a data dump of your task list to backup or 
 #image("decomp.png")
 === Frontend
 #image("frontend.png")
-This shows the different pages and operations I will need to implement on the frontend, I chose to break down the project into pages and the flow on each page as they are a natural way of breaking up web apps. I also split the project into frontend (client-side) and backend (server-side), this is because the code will not be able to be shared between them easily, so its important to work out where each feature belongs.
+This shows the different pages and operations I will need to implement on the frontend, I chose to break down the project into pages and the flow on each page as they are a natural way of breaking up web apps. I also split the project into frontend (client-side) and backend (server-side), this is because the code will not be able to be shared between them easily, so its important to work out where each feature belongs. I've tried to make each page single purpose, for example the login page is only responsible for logging the user in, the overview page is only for providing an overview, this separation of concerns will make the site easier to implement than if lots of features were on one page. I've outlined the flow through each site to try and work out which algorithms will need to be on which page, and if there are any that need to be shared.
 === Backend
 #image("backend.png")
-This shows the different API routes I will need to implement on the backend, these will be used by the frontend. I've left out the scheduling algorithm as I cover it properly below in the algorithms section. I decomposed the needed APIs by operation so each route only had one thing to worry about, this would make it easy to reuse the APIs across the project in a modular way.
+This shows the different API routes I will need to implement on the backend, these will be used by the frontend. I've left out the scheduling algorithm as I cover it properly below in the algorithms section. I decomposed the needed APIs by operation so each route only had one thing to worry about, this would make it easy to reuse the APIs across the project in a modular way. Again I've outlined the program flow for each API route to start getting an idea about the algorithms I'll be implemented, and I've kept each route as simple as possible.
 
 #pagebreak()
 
@@ -232,6 +232,14 @@ function signup_backend(username, password) {
 }
 ```
 
+#table(columns: (auto, auto, auto, auto), 
+[*Variable*], [*Type*], [*Stores*], [*Justification*],
+[username], [string], [The user's username], [Used as the username for the new account],
+[password], [string], [The user's password], [Used as the password for the new account],
+[existing_users], [Array<User>], [All existing users], [Needed to check the new username doesn't conflict with any existing accounts],
+[token], [string], [An encrypted authentication token], [Will be used to authenticate the user in other routes]
+)
+
 === Login
 On the frontend this algorithm needs to run some basic validation and then call the lgoin backend API with the inputted username and password. The server will then check the username and password are correct, if it is then it generates a login token and returns it to the frontend which will then save it, before going to the overview page.
 
@@ -263,6 +271,15 @@ function login_backend(username, password) {
 }
 ```
 
+#table(columns: (auto, auto, auto, auto), 
+[*Variable*], [*Type*], [*Stores*], [*Justification*],
+[username], [string], [The user's username], [Used as the username for the new account],
+[password], [string], [The user's password], [Used as the password for the new account],
+[user], [User], [The user's account], [Needed to check the inputted password with the user's set password],
+[token], [string], [An encrypted authentication token], [Will be used to authenticate the user in other routes]
+)
+
+
 === Get Tasks API
 This algorithm is used by the frontend to fetch the list of tasks to display in the todo list view.
 ```
@@ -272,6 +289,14 @@ function get_tasks(token) {
   return tasks; 
 }
 ```
+
+#table(columns: (auto, auto, auto, auto), 
+[*Variable*], [*Type*], [*Stores*], [*Justification*],
+[token], [string], [An encrypted authentication token], [Needed to authenticate the user],
+[user], [User], [The authenticated user], [Needed to fetch all tasks belonging to the user],
+[tasks], [Array<Task>], [The user's tasks], [Used as the function's output],
+)
+
 
 === Get Schedule API
 This algorithm is used by the frontend to fetch the schedule to display the current and upcoming tasks in the overview page.
@@ -283,6 +308,13 @@ function get_schedule(token) {
   return schedule; 
 }
 ```
+
+#table(columns: (auto, auto, auto, auto), 
+[*Variable*], [*Type*], [*Stores*], [*Justification*],
+[token], [string], [An encrypted authentication token], [Needed to authenticate the user],
+[user], [User], [The authenticated user], [Needed to fetch the user's schedule],
+[schedule], [Schedule], [The user's schedule], [Used as the function's output],
+)
 
 === Edit Task API
 This algorithm edits a task stored in the database, the schedule must be regenerated to keep it up to date
@@ -296,6 +328,15 @@ function edit_task(token, oldTask, newTask) {
 } 
 ```
 
+#table(columns: (auto, auto, auto, auto), 
+[*Variable*], [*Type*], [*Stores*], [*Justification*],
+[token], [string], [An encrypted authentication token], [Needed to authenticate the user],
+[oldTask], [Task], [The existing task], [Needed to work out which task to edit],
+[newTask], [Task], [The editted task], [Needed to store the data used for the edit query],
+[user], [User], [The authenticated user], [Needed to check the task belongs to the user],
+)
+
+
 === Delete Task API
 This algorithm deleted a task stored in the database, the schedule must be regenerated to keep it up to date
 
@@ -307,6 +348,13 @@ function delete_task(token, task) {
   generate_schedule(user);
 } 
 ```
+
+#table(columns: (auto, auto, auto, auto), 
+[*Variable*], [*Type*], [*Stores*], [*Justification*],
+[token], [string], [An encrypted authentication token], [Needed to authenticate the user],
+[task], [Task], [The task to delete], [Needed to work out which task to delete],
+[user], [User], [The authenticated user], [Needed to check the task belongs to the user],
+)
 
 === Generate Schedule
 This algorithm takes a list of tasks and returns a schedule with every task somewhere on it, this algorithm will be developed properly as I iterate on the implemented version, so for now I've picked a very simple algorithm which will be optimised in the future. All it currently does is sort the tasks by the deadline and then packs them into the schedule.
@@ -338,6 +386,17 @@ function generate_schedule(tasks: Array<Task>, day_start: Time, day_end: Time) -
 
 This algorithm has a lot of flaws, like it doesn't pack tasks a the end of a day and doesn't nessesarily meet all deadlines, but it will work the majority of the time, and I can improve it once the rest of the product is built.
 
+#table(columns: (auto, auto, auto, auto), 
+[*Variable*], [*Type*], [*Stores*], [*Justification*],
+[tasks], [Array<Task>], [The list of tasks to schedule], [Needed to work out which tasks need to be scheduled],
+[day_start], [Time], [The time the user's day starts], [Used as the time start is reset to when moving on to the next day],
+[day_end], [Time], [The time the user's day ends], [Needed to check against when the task would end, if this time is earlier, the algorithm moves onto the next day],
+[sorted], [Array<Task>], [The list of tasks sorted by deadline], [Stores the tasks in a more useful order than tasks, since the deadline acts as a kind of priority],
+[start], [Datetime], [The time the next task would be schedule for], [Keeps track of when the next scheduled task will be scheduled for],
+[schedule], [Array<ScheduledTask>], [The list of scheduled tasks], [Used to store scheduled tasks so they can be returned from the function],
+)
+
+
 === Data Types 
 ```rust
 struct User {
@@ -366,6 +425,9 @@ struct Schedule {
 
 === Validation
 Most validation has been included in algorithms planning, but I will need to ensure User references in the Schedule and Task struct are valid when I use them to ensure the program is robust.
+
+=== Forming a Complete Solution
+Each of these algorithms are responsible for one API route/ page which corresponds to an API route/page on the decompostion diagram above, since every page and route is covered, it will form a complete solution according to the decompostion diagram.
 
 == Testing
 I will take an iterative approach to testing where after each feature is implemented I will run the associated tests to check its working, if it doesn't work then I'll fix it before moving on to the next iteration.
@@ -2448,7 +2510,6 @@ And will that done, all tests have either passed or failed as expected meaning t
 
 
 == TODO LIST:
-Design: Pick out variables for algs section
 Design: Validation
 Implementation: Make validation really really obvious
 Evaluation: Usability features
