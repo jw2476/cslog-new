@@ -191,6 +191,19 @@ This page is what users will use to sign up for and log in to their account, fro
 #image("edit.png")
 This will pop up from the bottom of the screen whenever the user click on a task in any of the 3 main pages. To simplify input validation, I've chosed to use on dropdowns, native date and time pickers as much as possible. I'm not sure if the title editting by clicking on it will be obvious so I might change that design if its an issue
 
+== Usability Features
+#table(columns: (auto, auto),
+[*Feature*], [*Justification*],
+[Large user interface], [As I found in my survey, the main target platform will be mobile devices. To make UIs easy to use on devices with smaller screens things like buttons need to be much larger than on desktop so the user can easily click on them. The same is true for text and inputs.],
+[Simple user interface], [The UI needs to be simple and intuitive to use so the user can easily learn how to use the website. Simple UIs also are easier to use for younger children or older people, although these aren't a huge part of my target audience.].
+[Colour coded buttons], [All buttons will be a bright colour to make it clear that they are buttons rather then information, and that the user can interact with this. This is helpful because it separates interactables from the rest of the UI, making it easier to use.],
+[Input validation], [When the user is inputting data, it needs to be clear how to input the data correctly, and not let them enter invalid data. This can be done with validation and good error messages if invalid data is entered.],
+[Icons], [Icons can demonstrate meaning easily without needing lots of work, for instance a calendar next to a date could show a deadline, or a clock next to a time would likely mean duration. Using icons means the UI will be easier and more intuitive to use],
+[Large text], [The larger the text, the easier it is to read, especially on mobile platforms and for people with impaired eyesight. By including this feature the UI will be usable by more people],
+[Error messages], [Error messages can be used to communicate issues with inputs, such as trying to complete a task when there isn't a current task. This means the user can understand what went wrong and try to fix it, rather than the website silently failing, confusing the user],
+[Automatic Navigation], [Automatic redirects and forwarding should be used to help the user navigate around the site, for example if the user goes to the an sign up page and they are logged in, the user should be sent to the overview page]
+)
+
 == Algorithms
 === Signup
 On the frontend this algorithm needs to run some basic validation and then call the signup backend API with the inputted username and password. The server will then check the username if the username is free, if it is then it creates a new account, generates a login token and returns it to the frontend which will then save it, before going to the overview page.
@@ -2435,7 +2448,6 @@ And will that done, all tests have either passed or failed as expected meaning t
 
 
 == TODO LIST:
-Design: Usability Features
 Design: Pick out variables for algs section
 Design: Validation
 Implementation: Make validation really really obvious
