@@ -428,14 +428,15 @@ Will come up with these once I've decided more about the schedule view
 
 = Implementation
 == Tech Stack
-When making web apps there is a massive choice in frameworks and libraries to help with making reactive websites in JavaScript, such as React, Vue, Svelte, SolidJS, and even new WebAssembly libaries like Leptos and Yew which are both written in Rust. I need my app to load anywhere, including places with slow internet so I need my bundle sizes to be as small as possible, so that means frameworks like React, Vue, Leptos and Yew won't be a good fit as they come with large library bloat. Whereas Svelte and SolidJS both compile away when building the website meaning the bundle will be kept small, and only contain the code I use. I've used Svelte in the past and I want to learn something new so I've chosen to use SolidJS for my frontend library. 
+When making web apps there is a massive choice in frameworks and libraries to help with making reactive websites in JavaScript, such as React, Vue, Svelte, SolidJS, and even new WebAssembly libaries like Leptos and Yew which are both written in Rust. I need my app to load anywhere, including places with slow internet so I need my bundle sizes to be as small as possible. This means frameworks like React, Vue, Leptos and Yew won't be a good fit as they come with large library bloat. Whereas Svelte and SolidJS both compile away when building the website meaning the bundle will be kept small, and only contain the code I use. I've used Svelte in the past and I want to learn something new so I've chosen to use SolidJS for my frontend library. 
 
 For the backend, I've also chosed SolidJS as I'm planning to use a fullstack framework based on SolidJS called SolidStart, this allows me to write the website frontend and the backend API in one codebase. 
 
 == Authentication
-Since most of the other features depend on authentication, for example the timetable needs an owner, I've chosen to start with it. Firstly, I designed a login and sign up page based on the UI mockups I created earlier:
+I could have started with a page like the overview, as it will be the most used, however since so many features depend on authentication, I've chosen to start with it instead. Firstly, I designed a login and sign up page based on the UI mockups I created earlier:
 
-TODO: SCREENSHOTS
+#image("loginpage.png")
+#image("signup.png")
 
 The base HTML code for this is as follows, I've used some prebuilt components from a library called solid-ui and then modified them to my preference:
 ```html
@@ -637,7 +638,7 @@ const [taken, setTaken] = createSignal(false);
 
 This code raises errors if any of the fields are empty, or if the passwords don't match, or if the username is taken and shows a red label in the UI.
 
-TODO: SCREENSHOTS
+#image("signuperror.png")
 
 === Signup Error Testing
 #table(columns: (auto, auto, auto, auto, auto),
@@ -1699,8 +1700,8 @@ This function will be run on the server when the page is accessed, it gets the u
 
 This component creates the UI from the design section successfully, and it also scales correctly for mobile usage:
 
-TODO: PC Overview UI
-TODO: Mobile Overview UI
+#image("overviewpage.png")
+#image("overviewpagemobile.png")
 
 One thing I encountered while making the page is that displaying task information was something needed in many places, so I decided to abstract it into a separate component:
 
@@ -1940,7 +1941,7 @@ The column is nullable, as a null value would mean the task is unrepeated. A val
 ```
 
 This added another row to the form grid, I decided to display the units of the interval to make it clear to the user that the unit used is days.
-TODO: Screenshot
+#image("taskeditrepeatfield.png")
 
 Now tasks were able to be set to repeat, I needed to reschedule repeat tasks when they are completed, rather than deleting them like I am currently. Since this meant I could no longer just use `DELETE /api/tasks` I decided to make a new API route `/api/complete` which would handle the completion of a task:
 
@@ -2155,7 +2156,7 @@ The majority of the feedback I recieved was that navigating around the pages was
 </div>
 ```
 
-TODO: Screenshot
+#image("navbarwithoutbutton.png")
 
 I decided to give the navbar two model, authenticated and unauthenticated, which will change the right hand buttons from Logout to Login+Signup respectively. The navbar's variant will be set on each page, the pages that require the user to be authenticated will show the navbar in the authenticated variant. 
 
@@ -2185,6 +2186,259 @@ All the route does is delete the user's `token` cookie, meaning the client will 
 With those changes made I updated the deployment and asked the stakeholders for feedback, they said the website was much easier to use than before. 2 of the 3 pieces of feedback I was given had been addressed, so I moved onto adding the new add task button onto the navbar.
 
 === Extra Add Task Button
+The other piece of feedback I recieved from stakeholders was the lack of a create task button on any page other than the tasks list view. One of my success criteria is that tasks should be easy and intuitive to add, so making sure they could be added from anywhere was very important. I decided to copy the new task button from the task list page to the navigation bar, there wasn't any new code here since I was just refactoring and copying code from the task list page:
+
+```ts
+<script lang="ts">
+  let staging: Task = {
+		deadline: new Date(Date.now()),
+		duration: 0,
+		title: '',
+		id: 0,
+		scheduled: null,
+		repeat: 0,
+		startAfter: new Date(Date.now())
+	};
+
+  async function createTask(task: Task) {
+		const body = {
+			startAfter: task.startAfter.getTime(),
+			deadline: task.deadline.getTime(),
+			duration: task.duration,
+			title: task.title,
+			repeat: task.repeat
+		};
+		await fetch('/api/tasks', { method: 'POST', body: JSON.stringify(body) });
+		await invalidateAll(); // Reload page to make task list changes take effect
+	}
+
+  ...
+</script>
+
+<div class="flex justify-between gap-4 border-b p-4">
+	<div class="flex items-start gap-4">
+		<Button href="/">Overview</Button>
+		<Button href="/tasks">Tasks</Button>
+	</div>
+	{#if authed}
+		<Edit callback={createTask} bind:task={staging} class="grow" dialogTitle="Create task">
+			<Plus class="h-4" />
+		</Edit>
+		<Button on:click={logout}>Log Out</Button>
+	{:else}
+		<div class="flex items-end gap-4">
+			<Button href="/login">Log In</Button>
+			<Button href="/signup">Sign Up</Button>
+		</div>
+	{/if}
+</div>
+```
+
+Since the user had to be logged in to add a task, I decided to only show the button when the nav bar was in authenticated mode. I reused the `Edit` component from the task list page and added a new `class` property which allowed me to specify the styling. With that the new add task button was made and I had responded to all of my stakeholders' feedback, meaning I was ready to implement the last feature: reminder notifications.
+
 === Reminder Notifications
-=== PWAs
-=== Testing Phase
+I wanted to send a series of notifications to the user for events such as tasks starting/finishing, or timed warning such as 10 minutes before a task ending. To send notifications on a web app I had to use the #link("https://developer.mozilla.org/en-US/docs/Web/API/notification#examples")[Notifications API] which handled requesting permisson to send notifications, as well as sending the notifications to the operating system. It also provided a convinient `Notification` class which I could fill out with things like images and badges to make my notification look nicer, however I decided to not use those features.
+
+To implement notifications, the first thing I had to do was request permission when on the overview page, which is the page the user must be on for notifications to work.
+
+```ts
+<script lang="ts">
+  onMount(async () => {
+    if (Notification.permission !== "granted") {
+        await Notification.requestPermission();
+    }
+
+    ...
+	});
+
+  ...
+</script>
+```
+
+This code checks if permission has already been granted, if not it prompts the browser to request permission which in Google Chrome causes this popup:
+#image("popup.png", height: 30%)
+
+With permission granted I could now send notifications to the browser, looking at the Mozilla API docs, it looked like all I needed to do was to construct a `Notification` object, for example:
+
+```ts
+new Notification("Hello, World!");
+```
+
+Would cause a notification with the body `Hello, World!` to appear on the user's computer. Running a quick test I could see it was working:
+
+#image("testnotification.png", height: 30%)
+
+The first notification I wanted to make was the new task started notification, for which I needed to check if the current task had changed, and if it had to send a notification:
+
+```ts
+  function setCurrent() {
+		const old = current;
+		current = schedule.find((task, a, b) => {
+			if (task.scheduled === null) {
+				return false;
+			}
+			let now = Date.now();
+			let start = task.scheduled.getTime();
+			let end = task.scheduled.getTime() + task.duration * 1000;
+			return start <= now && now <= end;
+		});
+
+		if (browser && old !== current && current != null) {
+			new Notification(`Task Started: ${current.title}`);
+		}
+	}
+```
+
+With the task started notification working, I moved on to the task starts/ends in 10 minutes notification:
+
+```ts
+  function checkNotifications() {
+		let now = Date.now();
+
+		schedule.forEach((task) => {
+			if (!task.scheduled) return;
+			let start = task.scheduled.getTime();
+			let tenBeforeStart = start - 10 * 60 * 1000;
+
+			let end = task.scheduled.getTime() + task.duration * 1000;
+			let tenTillEnd = end - 10 * 60 * 1000; // Subtract 10 mins in ms
+
+			if (lastRan <= tenBeforeStart && tenBeforeStart <= now) {
+				// ten minutes until end was in time window
+				new Notification(`Starting in 10: ${task.title}`);
+			}
+
+			if (lastRan <= tenTillEnd && tenTillEnd <= now) {
+				// ten minutes until end was in time window
+				new Notification(`10 minutes remaining: ${task.title}`);
+			}
+		});
+
+		lastRan = now;
+	}
+```
+
+This algorithm works by checking if the times (e.g. 10 minutes before end) have past in the window between when we last ran the function and now. If it does a notification is sent to the user.
+
+After entering some mock task data to check the notifications were working, I saw everything was working fine:
+
+#image("startingsoon.png", height: 30%)
+#image("endingsoon.png", height: 30%)
+
+With all the reminder notifications added, I decided to deploy to the public test server.
+
+At this point I only had two features left to implement, the schedule view and task priority. After having a discussion with my stakeholders about whether the features were a good idea, nearly all felt that the schedule view would be misleading since the schedule can change greatly. We felt the user being able to see the schedule so far in advance would result in confusion if the task is rescheduled for a different time, so I've decided not to implement the schedule view. We also felt adding a priority option to tasks was one column to many, the task addition form was already taking a while to fill out, and priority wasn't really that userful to schedule generation as I'd initially thought, so I've decided to drop that feature also. This meant that I'd unknowingly finished the product, so I decided to do a full test of the product:
+
+= Evaluation
+== Final Testing
+=== Login
+#table(columns: (auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*],
+[L1], [Log in with a correct username and password], [Login succeeds and returns a auth token], [Login success and auth token is saved to browser cookies, user is redirected to overview page],
+[L2], [Log in with a username that does not exist],  [Error is raised and user is asked to sign up], [Error is raised and user is asked to sign up],
+[L3], [Log in with a correct username and invalid password],  [Error is raised and user is asked to recheck their password], [Error is raised and user is asked to recheck their password],
+[L4], [Log in with either an empty username or password], [Error is raised and user is asked to fill username and password boxes], [Error is raised and user is asked to fill username and password boxes],
+[L5], [Goes to log in page while already logged in], [User is redirected to overview page], [User is redirected to overview page],
+)
+
+=== Signup
+#table(columns: (auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*],
+[S1], [Sign up with an unused username and password],  [Sign up succeeds and returns a auth token], [Sign up succeeds and returns a auth token, user is redirected to overview page],
+[S2], [Sign up with a used username],  [Error is raised and user is asked to choose a different username], [Error is raised and user is asked to choose a different username],
+[S3], [Sign up with either an empty username or password],  [Error is raised and user is asked to fill username and password boxes], [Error is raised and user is asked to fill username and password boxes],
+[S4], [Goes to sign up page while already logged in],  [User is redirected to overview page], [User is redirected to overview page]
+)
+
+=== Overview
+#table(columns: (auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*],
+[O1], [Go to page while there is a current task], [Page shows current task, remaining time, and other information], [As expected],
+[O2], [Go to page while there is not a current task],  [Page shows there is no task and shows the next upcoming task], [As expected],
+[O3], [Complete button pressed while there is a current task],  [Completes the task, regenerates schedule and updates page], [As expected],
+[O4], [Complete button pressed while there is no current task],  [Errors saying there is no ongoing task], [As expected],
+[O5], [Snooze button pressed while there is a current task],  [Snoozes the task, regenerates the schedule and updates page], [As expected],
+[O6], [Snooze button pressed while there is no current task],  [Errors saying there is no ongoing task], [As expected],
+[07], [Break button pressed],  [Pop up prompting for break duration], [No popup anymore but break task is added to schedule],
+[O8], [Duration entered into break popup],  [Clears all task for the entered duration, regenerates schedule and updates the page], [As expected],
+[O9], [Task list button pressed],  [Goes to task list page], [As expected],
+[O10], [Schedule list button pressed],  [Goes to schedule view page], [Schedule view page does not exist],
+[O11], [Overview button pressed],  [Nothing happens], [As expected],
+)
+
+=== Task List
+#table(columns: (auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*],
+[T1], [Go to page],  [See a list of all tasks], [As expected],
+[T2], [Click on any task],  [Opens task edit UI], [As expected],
+[T3], [Overview button pressed],  [Goes to overview page], [As expected],
+[T4], [Task list button pressed],  [Does nothing], [As expected],
+[T5], [Schedule button pressed],  [Goes the schedule view page], [Schedule view page does not exist],
+)
+
+=== Task Edit
+#table(columns: (auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*],
+[E1], [Delete button pressed],  [Task deleted and schedule regenerated], [As expected],
+[E2], [Title editted to a non-empty value],  [Task title changed], [As expected],
+[E3], [Title editted to an empty value],  [Error message appears saying tasks must have a title], [As expected],
+[E4], [Deadline editted],  [Task deadline changed, schedule regenerated], [As expected],
+[E5], [Duration editted to a non-zero value],  [Task duration changed, schedule regenerated], [As expected],
+[E6], [Duration editted to a zero],  [Error appears saying tasks must have a duration], [As expected],
+[E7], [Priority changed],  [Task priority changed, schedule regenerated], [Priority is no longer a feature]
+)
+
+=== Schedule Generation
+#table(columns: (auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*],
+[G1], [Schedule generated with valid list of tasks],  [All tasks are scheduled to be completed before their deadline], [As expected],
+[G2], [Schedule generated with valid list of tasks],  [All tasks are scheduled to take their duration], [As expected],
+[G3], [Schedule generated with impossible list of tasks],  [Error raised about impossible task list], [As close to valid task list as possible is generated, we found this was more useful than just erroring],
+[G4], [Schedule generated with valid list of tasks],  [Tasks with higher priorities are often schedules before tasks with lower priorities], [Priority is no longer a feature],
+)
+
+And will that done, all tests have either passed or failed as expected meaning the product is complete! As well as this a few stakeholders and I used the website for a few days and ran in to no issues, the scheduling algorithm was a bit strange at times but thats something I can look at improving if I wanted to take this project further. 
+
+== Success Criteria Evaluation
+=== Inputs
+#table(columns: (auto, auto, auto, auto), 
+[*Criteria*], [*Explanation*], [*Evidence*], [*Outcome*],
+[The user should be able to add tasks with a title, deadline, duration, repeat scheduling and priority easily on both desktop and mobile platforms], [Users need to be able to add tasks as they think of them, else they might forget and it won't be added to their schedule. If adding tasks is complicated or takes too long then people just won't add them], [E2-E6 shows the form used to edit and create tasks validates the input correctly, this makes it easy to use. In addition, everyone who tested the website said the UI was "very intuitive" which shows the feature is easy to use and works correctly.], [Fully Met],
+[The user should be able to edit tasks and delete them], [Tasks can change as users realise they might take longer than estimate, or the deadline might move, or someone else might do the task for them, the app needs to facilitate this by letting users edit and delete tasks], [E1 shows deletion working, E2-E6 shows editting tasks working. All users encountered the edit and delete task buttons by themselves, they also were able to use the form without me having to explain it, this shows the feature is intuitive to use.], [Fully Met],
+[The user should be able to mark tasks as complete easily], [Tasks need to be easily marked as complete else users might forget which would mean the schedule will desync], [O3 and O4 shows that the complete task feature was working correctly, all testers found the complete button and understood its usage by themselves, this shows the feature is easy to use and intuitive], [Fully Met],
+[The user should be able to take a break for any length of time, which will clear their schedule], [If users are taking a break, the app needs to not schedule any tasks for that time else the schedule will desync], [O7 and O8 show the break feature working correctly, not all users understood how breaks work, or how to enter a time, so this feature may need improvement], [Partially Met],
+)
+=== Outputs
+#table(columns: (auto, auto, auto, auto), 
+[*Criteria*], [*Explanation*], [*Evidence*], [*Outcome*],
+[The user should be able to see a list of tasks and their information easily], [The users will need to manage their tasks, this could include editting them, deleting them and more. This information needs to be nicely presented to the user], [O1 and O2 show the overview page working corretly, this shows the user their current and upcoming tasks. T1 shows the task list page working correctly, this shows the user all their tasks and allows for editting and deletion. Both features were easily identified by testers, showing it is easy to use, many testers also said the multiple views make their task lists easier to understand and process], [Fully Met],
+[The user should be able to quickly see their current task and upcoming tasks on their schedule], [Users could want to check what task they need to do, or prepare for upcoming ones], [O1 and O2 show the current and upcoming tasks were displayed correctly on the overview page, all testers found this feature intuitive to use. The overview page is also the root URL of the site, and the first page the user will go to when they go to the website, this means it is quick to check.], [Fully Met],
+[The user should be sent reminder notifications when they need to start a new task], [As I found in my survey, users want to be reminded of their task when they need to start it, so they don't have to constantly check the app], [While reminder notifications worked for those testing on PC, any mobile users said reminder notifications didn't work for them. I will need to test this feature further to fix it for mobile users, however those who had them said they were very useful], [Partially Met],
+[The website should be aesthetic and intuitive to use], [As I found in the survey, UIs that are both aesthetic and easy to use are quite important for most people], [Nearly all usability features were met, in addition most testers said the UI was one of the strongest parts of the website, it was intuitive to use, and mostly worked on both mobile and desktop.], [Fully Met] 
+)
+=== Processing
+#table(columns: (auto, auto, auto, auto), 
+[*Criteria*], [*Explanation*], [*Evidence*], [*Outcome*],
+[When a user makes any change to their task list, it should be stored on the server], [Users might want to use the app on multiple devices, meaning tasks have to be synced across them. For this a user's task list must be stored in a database with APIs for getting and modifying the task list], [O1, O2 and T1 all show the task list being fetched correctly, E1-E6 as well as O3-O8 show modifications to the task list were synced to the server correctly and persisted. No testers complained about syncing issues even when using multiple devices or bad internet, which suggests the feature is reliable], [Fully Met],
+[A schedule should be generated for the users task list], [As I found by talking to people that took the survey, many people want a personal schedule to follow, but don't want to have to schedule it themselves because it takes too long and isn't flexible. By generating a schedule on-the-fly it becomes nearly instant and flexible as another schedule can be generated at any time], [While G1-G4 show schedule generation working correctly, and the E1-E6 shows the schedule is regenerated at the correct time, many testers complained how the generated schedule wasn't great, there were lots of issues like task order being strange and the day start/end times resulting in testers being confused why tasks were being scheduled for the following day instead of immediately. This shows I have a lot more work to do with schedule generation], [Partially Met],
+[When a user makes any change to their task list or decides to take a break, the schedule should be regenerated], [E1-E6 and O3-O8 show the schedule is regenerated at the correct times, there were also no complaints from testers about the schedule not being regenerated], [Fully Met],
+[Generated schedules should meet all deadlines and prioritise tasks correctly], [If a schedule doesn't fit the user's task list, then its not very useful], [G1-G4 shows schedule generation worked for the large amount of schedules I tested it with, in addition no testers complained about incorrect schedules, showing this feature is reliably implemented], [Fully Met]
+)
+
+=== Conclusion
+#table(columns: (auto, auto), 
+[*Issue*], [*Potential Fixes*],
+[Many testers felt quality of schedules were poor and they were generated in an unintuitive way], [Improve scheduling algorithm, many add some more fields, and also make the day start/end time more obvious to the user],
+[Reminder notifications didn't work on mobile], [With more time and testing, this should be fixable, I imagine its just a bug in the code],
+[Taking a break was unintuitive], [A better UI would probably help, maybe my original idea with a popup window would've worked better. In addition modifying the start time might be a more reliable method of inserting a break into the schedule compared to the current method of creating a break task]
+)
+
+
+== TODO LIST:
+Design: Usability Features
+Design: Pick out variables for algs section
+Design: Validation
+Implementation: Make validation really really obvious
+Evaluation: Usability features
+Evaluation: Maintenance issues and limitations
+Evaluation: Future developments
