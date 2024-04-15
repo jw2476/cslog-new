@@ -208,7 +208,7 @@ This will pop up from the bottom of the screen whenever the user click on a task
 === Signup
 On the frontend this algorithm needs to run some basic validation and then call the signup backend API with the inputted username and password. The server will then check the username if the username is free, if it is then it creates a new account, generates a login token and returns it to the frontend which will then save it, before going to the overview page.
 
-```
+```rs
 function signup_frontend(username, password) {
   if username.is_empty() or password.is_empty() {
     return;
@@ -243,7 +243,7 @@ function signup_backend(username, password) {
 === Login
 On the frontend this algorithm needs to run some basic validation and then call the lgoin backend API with the inputted username and password. The server will then check the username and password are correct, if it is then it generates a login token and returns it to the frontend which will then save it, before going to the overview page.
 
-```
+```rs
 function login_frontend(username, password) {
   if username.is_empty() or password.is_empty() {
     return;
@@ -282,7 +282,7 @@ function login_backend(username, password) {
 
 === Get Tasks API
 This algorithm is used by the frontend to fetch the list of tasks to display in the todo list view.
-```
+```rs
 function get_tasks(token) {
   user = get_user_from_token(token);
   tasks = get_tasks().filter(task => task.owner == user);
@@ -301,7 +301,7 @@ function get_tasks(token) {
 === Get Schedule API
 This algorithm is used by the frontend to fetch the schedule to display the current and upcoming tasks in the overview page.
 
-```
+```rs
 function get_schedule(token) {
   user = get_user_from_token(token);
   schedule = get_schedules().filter(schedule => schedule.owner == user)[0]; // A user will only have one schedule
@@ -319,7 +319,7 @@ function get_schedule(token) {
 === Edit Task API
 This algorithm edits a task stored in the database, the schedule must be regenerated to keep it up to date
 
-```
+```rs
 function edit_task(token, oldTask, newTask) {
   user = get_user_from_token(token);
   if user != oldTask.owner { return ERR_UNAUTHORISED; }
@@ -340,7 +340,7 @@ function edit_task(token, oldTask, newTask) {
 === Delete Task API
 This algorithm deleted a task stored in the database, the schedule must be regenerated to keep it up to date
 
-```
+```rs
 function delete_task(token, task) {
   user = get_user_from_token(token);
   if user != task.owner { return ERR_UNAUTHORISED; }
@@ -359,7 +359,7 @@ function delete_task(token, task) {
 === Generate Schedule
 This algorithm takes a list of tasks and returns a schedule with every task somewhere on it, this algorithm will be developed properly as I iterate on the implemented version, so for now I've picked a very simple algorithm which will be optimised in the future. All it currently does is sort the tasks by the deadline and then packs them into the schedule.
 
-```
+```rs
 struct ScheduledTask {
   start: Time,
   end: Time,
@@ -2480,7 +2480,7 @@ And will that done, all tests have either passed or failed as expected meaning t
 == Success Criteria Evaluation
 === Inputs
 #table(columns: (auto, auto, auto, auto), 
-[*Criteria*], [*Explanation*], [*Evidence*], [*Outcome*],
+[*Criteria*], [*Explanation*], [*Justification*], [*Outcome*],
 [The user should be able to add tasks with a title, deadline, duration, repeat scheduling and priority easily on both desktop and mobile platforms], [Users need to be able to add tasks as they think of them, else they might forget and it won't be added to their schedule. If adding tasks is complicated or takes too long then people just won't add them], [E2-E6 shows the form used to edit and create tasks validates the input correctly, this makes it easy to use. In addition, everyone who tested the website said the UI was "very intuitive" which shows the feature is easy to use and works correctly.], [Fully Met],
 [The user should be able to edit tasks and delete them], [Tasks can change as users realise they might take longer than estimate, or the deadline might move, or someone else might do the task for them, the app needs to facilitate this by letting users edit and delete tasks], [E1 shows deletion working, E2-E6 shows editting tasks working. All users encountered the edit and delete task buttons by themselves, they also were able to use the form without me having to explain it, this shows the feature is intuitive to use.], [Fully Met],
 [The user should be able to mark tasks as complete easily], [Tasks need to be easily marked as complete else users might forget which would mean the schedule will desync], [O3 and O4 shows that the complete task feature was working correctly, all testers found the complete button and understood its usage by themselves, this shows the feature is easy to use and intuitive], [Fully Met],
@@ -2488,7 +2488,7 @@ And will that done, all tests have either passed or failed as expected meaning t
 )
 === Outputs
 #table(columns: (auto, auto, auto, auto), 
-[*Criteria*], [*Explanation*], [*Evidence*], [*Outcome*],
+[*Criteria*], [*Explanation*], [*Justification*], [*Outcome*],
 [The user should be able to see a list of tasks and their information easily], [The users will need to manage their tasks, this could include editting them, deleting them and more. This information needs to be nicely presented to the user], [O1 and O2 show the overview page working corretly, this shows the user their current and upcoming tasks. T1 shows the task list page working correctly, this shows the user all their tasks and allows for editting and deletion. Both features were easily identified by testers, showing it is easy to use, many testers also said the multiple views make their task lists easier to understand and process], [Fully Met],
 [The user should be able to quickly see their current task and upcoming tasks on their schedule], [Users could want to check what task they need to do, or prepare for upcoming ones], [O1 and O2 show the current and upcoming tasks were displayed correctly on the overview page, all testers found this feature intuitive to use. The overview page is also the root URL of the site, and the first page the user will go to when they go to the website, this means it is quick to check.], [Fully Met],
 [The user should be sent reminder notifications when they need to start a new task], [As I found in my survey, users want to be reminded of their task when they need to start it, so they don't have to constantly check the app], [While reminder notifications worked for those testing on PC, any mobile users said reminder notifications didn't work for them. I will need to test this feature further to fix it for mobile users, however those who had them said they were very useful], [Partially Met],
@@ -2496,7 +2496,7 @@ And will that done, all tests have either passed or failed as expected meaning t
 )
 === Processing
 #table(columns: (auto, auto, auto, auto), 
-[*Criteria*], [*Explanation*], [*Evidence*], [*Outcome*],
+[*Criteria*], [*Explanation*], [*Justification*], [*Outcome*],
 [When a user makes any change to their task list, it should be stored on the server], [Users might want to use the app on multiple devices, meaning tasks have to be synced across them. For this a user's task list must be stored in a database with APIs for getting and modifying the task list], [O1, O2 and T1 all show the task list being fetched correctly, E1-E6 as well as O3-O8 show modifications to the task list were synced to the server correctly and persisted. No testers complained about syncing issues even when using multiple devices or bad internet, which suggests the feature is reliable], [Fully Met],
 [A schedule should be generated for the users task list], [As I found by talking to people that took the survey, many people want a personal schedule to follow, but don't want to have to schedule it themselves because it takes too long and isn't flexible. By generating a schedule on-the-fly it becomes nearly instant and flexible as another schedule can be generated at any time], [While G1-G4 show schedule generation working correctly, and the E1-E6 shows the schedule is regenerated at the correct time, many testers complained how the generated schedule wasn't great, there were lots of issues like task order being strange and the day start/end times resulting in testers being confused why tasks were being scheduled for the following day instead of immediately. This shows I have a lot more work to do with schedule generation], [Partially Met],
 [When a user makes any change to their task list or decides to take a break, the schedule should be regenerated], [E1-E6 and O3-O8 show the schedule is regenerated at the correct times, there were also no complaints from testers about the schedule not being regenerated], [Fully Met],
@@ -2511,10 +2511,29 @@ And will that done, all tests have either passed or failed as expected meaning t
 [Taking a break was unintuitive], [A better UI would probably help, maybe my original idea with a popup window would've worked better. In addition modifying the start time might be a more reliable method of inserting a break into the schedule compared to the current method of creating a break task]
 )
 
+== Usability Features
+#table(columns: (auto, auto, auto),
+[*Feature*], [*Justification*], [*Outcome*],
+[Large user interface], [All pages had large easy to see buttons and text, especially the overview page which was designed mainly for mobile devices. Many testers gave feedback on how the UI was easy to use on mobile devices], [Fully met],
+[Simple user interface], [All pages had a simple, elegant UI with the information presented clearly without visual distrractions. Many testers gave feedback on how the UI was very intuitive to use], [Fully met],
+[Colour coded buttons], [All buttons were a bright colour, I chose blue as my default colour but chose to use colours like red for destructive operations meaning the user can infer the meaning. Many testers gave feedback on how the UI was intuitive to use and it was obvious where buttons where and what they did], [Fully Met],
+[Input validation], [Input validation was implmented on all forms, and no testers ran into a way of entering invalid data], [Fully Met],
+[Icons], [Icons were used throughout the website to communicate meaning, for example a pencil icon was used for the edit button and a bin icon was used for the delete button. Many testers gave feedback on how intuitive the UI was, which shows the icons communicated meaning successfully], [Fully Met],
+[Large text], [Large text was used throughout website to communicate visual heirarchy as well as making important information easy to read. No testers felt that any information was hard to read on either mobile or desktop, however none of the testers had impaired eyesight so I may need to do more testing], [Partially Met],
+[Error messages], [Error messages were used on every form and effectively communicate any issues with invalid inputs. No testers were able to input invalid data into any forms], [Fully Met],
+[Automatic Navigation], [The final website included many redirects and gotos which helped to automate navigation around the site. No testers complained about getting lost in the pages and said the site was easy to navigte], [Fully Met]
+)
+
+== Maintenance and Limitations
+The existing code should be easy to add to or modify as it is well-named, modular, and commented. Since the server and client both use JS, an interpreted language, it would be easy to run on all sorts of machines and new hardware if the server needed to be updated. While modifying the code to add new features would be quite easy, if it involves updating the database schemas the maintainer will need to run a database migration to preserve user data. One of the big things that needs to be improved is the scheduling algorithm, since this is all located in one function it will be easy to improve in future, however care needs to be taken to regenerate everyones timetable whenever there is a scheduling modification to avoid race conditions.
+
+== Future Developments
+#table(columns: (auto, auto),
+[*Limitation/Issue*], [*Possible Solutions*],
+[Generated schedules aren't great], [More work could be done on the scheduling algorithm to increase the quality of the schedules, either by introducing new inputs or heuristics such as priority. This would be fairly easy to do since scheduling is all contained in a single module, however if any changes need to be made to the database the schemas must be updates and migrations ran],
+[Reminder notifications don't work on mobile], [This is likely a software bug so should be fixable easily, however this represents a larger issue that the app cannot send notifications unless it is open. Ideally the app would be used as a PWA(Progressive Web App) which would allow the user's schedule to be cached locally and reminder notifications can be queued meaning they will work without the app being open. This is a massive change to the entire site and would likely need a large rework],
+[Minor UI improvements], [With a few UI and styling tweaks some of the pages could be made easier to use, especially on mobile devices. This would likely be easy to implement since each page is stored in a standalone component] 
+)
 
 == TODO LIST:
-Design: Validation
 Implementation: Make validation really really obvious
-Evaluation: Usability features
-Evaluation: Maintenance issues and limitations
-Evaluation: Future developments
