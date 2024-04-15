@@ -2406,70 +2406,73 @@ At this point I only had two features left to implement, the schedule view and t
 
 = Evaluation
 == Final Testing
+=== Video
+Here's a #link("https://youtu.be/OB6mlZVhnI0")[video] of me demoing the product, the timestamps below refer to moments in this video where each test is showcased to pass/fail. 
+
 === Login
-#table(columns: (auto, auto, auto, auto),
-[*No.*], [*Description*], [*Expected*], [*Outcome*],
-[L1], [Log in with a correct username and password], [Login succeeds and returns a auth token], [Login success and auth token is saved to browser cookies, user is redirected to overview page],
-[L2], [Log in with a username that does not exist],  [Error is raised and user is asked to sign up], [Error is raised and user is asked to sign up],
-[L3], [Log in with a correct username and invalid password],  [Error is raised and user is asked to recheck their password], [Error is raised and user is asked to recheck their password],
-[L4], [Log in with either an empty username or password], [Error is raised and user is asked to fill username and password boxes], [Error is raised and user is asked to fill username and password boxes],
-[L5], [Goes to log in page while already logged in], [User is redirected to overview page], [User is redirected to overview page],
+#table(columns: (auto, auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*], [*Timestamp*],
+[L1], [Log in with a correct username and password], [Login succeeds and returns a auth token], [Login success and auth token is saved to browser cookies, user is redirected to overview page], [0:31],
+[L2], [Log in with a username that does not exist],  [Error is raised and user is asked to sign up], [Error is raised and user is asked to sign up], [0:09],
+[L3], [Log in with a correct username and invalid password],  [Error is raised and user is asked to recheck their password], [Error is raised and user is asked to recheck their password],[0:09],
+[L4], [Log in with either an empty username or password], [Error is raised and user is asked to fill username and password boxes], [Error is raised and user is asked to fill username and password boxes],[0:06],
+[L5], [Goes to log in page while already logged in], [User is redirected to overview page], [User is redirected to overview page],[0:31],
 )
 
 === Signup
-#table(columns: (auto, auto, auto, auto),
-[*No.*], [*Description*], [*Expected*], [*Outcome*],
-[S1], [Sign up with an unused username and password],  [Sign up succeeds and returns a auth token], [Sign up succeeds and returns a auth token, user is redirected to overview page],
-[S2], [Sign up with a used username],  [Error is raised and user is asked to choose a different username], [Error is raised and user is asked to choose a different username],
-[S3], [Sign up with either an empty username or password],  [Error is raised and user is asked to fill username and password boxes], [Error is raised and user is asked to fill username and password boxes],
-[S4], [Goes to sign up page while already logged in],  [User is redirected to overview page], [User is redirected to overview page]
+#table(columns: (auto, auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*], [*Timestamp*],
+[S1], [Sign up with an unused username and password],  [Sign up succeeds and returns a auth token], [Sign up succeeds and returns a auth token, user is redirected to overview page],[0:17],
+[S2], [Sign up with a used username],  [Error is raised and user is asked to choose a different username], [Error is raised and user is asked to choose a different username],[0:27],
+[S3], [Sign up with either an empty username or password],  [Error is raised and user is asked to fill username and password boxes], [Error is raised and user is asked to fill username and password boxes],[0:15],
+[S4], [Goes to sign up page while already logged in],  [User is redirected to overview page], [User is redirected to overview page],[0:17],
 )
 
 === Overview
-#table(columns: (auto, auto, auto, auto),
-[*No.*], [*Description*], [*Expected*], [*Outcome*],
-[O1], [Go to page while there is a current task], [Page shows current task, remaining time, and other information], [As expected],
-[O2], [Go to page while there is not a current task],  [Page shows there is no task and shows the next upcoming task], [As expected],
-[O3], [Complete button pressed while there is a current task],  [Completes the task, regenerates schedule and updates page], [As expected],
-[O4], [Complete button pressed while there is no current task],  [Errors saying there is no ongoing task], [As expected],
-[O5], [Snooze button pressed while there is a current task],  [Snoozes the task, regenerates the schedule and updates page], [As expected],
-[O6], [Snooze button pressed while there is no current task],  [Errors saying there is no ongoing task], [As expected],
-[07], [Break button pressed],  [Pop up prompting for break duration], [No popup anymore but break task is added to schedule],
-[O8], [Duration entered into break popup],  [Clears all task for the entered duration, regenerates schedule and updates the page], [As expected],
-[O9], [Task list button pressed],  [Goes to task list page], [As expected],
-[O10], [Schedule list button pressed],  [Goes to schedule view page], [Schedule view page does not exist],
-[O11], [Overview button pressed],  [Nothing happens], [As expected],
+#table(columns: (auto, auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*], [*Timestamp*],
+[O1], [Go to page while there is a current task], [Page shows current task, remaining time, and other information], [As expected],[1:16],
+[O2], [Go to page while there is not a current task],  [Page shows there is no task and shows the next upcoming task], [As expected],[0:39],
+[O3], [Complete button pressed while there is a current task],  [Completes the task, regenerates schedule and updates page], [As expected],[1:24],
+[O4], [Complete button pressed while there is no current task],  [Errors saying there is no ongoing task], [As expected],[0:39],
+[O5], [Snooze button pressed while there is a current task],  [Snoozes the task, regenerates the schedule and updates page], [As expected],[1:33],
+[O6], [Snooze button pressed while there is no current task],  [Errors saying there is no ongoing task], [As expected],[0:39],
+[07], [Break button pressed],  [Pop up prompting for break duration], [No popup anymore but break task is added to schedule],[1:40],
+[O8], [Duration entered into break popup],  [Clears all task for the entered duration, regenerates schedule and updates the page], [As expected],[1:38],
+[O9], [Task list button pressed],  [Goes to task list page], [As expected],[0:40],
+[O10], [Schedule list button pressed],  [Goes to schedule view page], [Schedule view page does not exist],[-],
+[O11], [Overview button pressed],  [Nothing happens], [As expected],[1:13],
 )
 
 === Task List
-#table(columns: (auto, auto, auto, auto),
-[*No.*], [*Description*], [*Expected*], [*Outcome*],
-[T1], [Go to page],  [See a list of all tasks], [As expected],
-[T2], [Click on any task],  [Opens task edit UI], [As expected],
-[T3], [Overview button pressed],  [Goes to overview page], [As expected],
-[T4], [Task list button pressed],  [Does nothing], [As expected],
-[T5], [Schedule button pressed],  [Goes the schedule view page], [Schedule view page does not exist],
+#table(columns: (auto, auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*], [*Timestamp*],
+[T1], [Go to page],  [See a list of all tasks], [As expected],[0:43, 1:44],
+[T2], [Click on any task],  [Opens task edit UI], [As expected],[0:43],
+[T3], [Overview button pressed],  [Goes to overview page], [As expected],[1:12],
+[T4], [Task list button pressed],  [Does nothing], [As expected],[0:41],
+[T5], [Schedule button pressed],  [Goes the schedule view page], [Schedule view page does not exist],[-],
 )
 
 === Task Edit
-#table(columns: (auto, auto, auto, auto),
-[*No.*], [*Description*], [*Expected*], [*Outcome*],
-[E1], [Delete button pressed],  [Task deleted and schedule regenerated], [As expected],
-[E2], [Title editted to a non-empty value],  [Task title changed], [As expected],
-[E3], [Title editted to an empty value],  [Error message appears saying tasks must have a title], [As expected],
-[E4], [Deadline editted],  [Task deadline changed, schedule regenerated], [As expected],
-[E5], [Duration editted to a non-zero value],  [Task duration changed, schedule regenerated], [As expected],
-[E6], [Duration editted to a zero],  [Error appears saying tasks must have a duration], [As expected],
-[E7], [Priority changed],  [Task priority changed, schedule regenerated], [Priority is no longer a feature]
+#table(columns: (auto, auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*], [*Timestamp*],
+[E1], [Delete button pressed],  [Task deleted and schedule regenerated], [As expected],[1:45],
+[E2], [Title editted to a non-empty value],  [Task title changed], [As expected],[0:53],
+[E3], [Title editted to an empty value],  [Error message appears saying tasks must have a title], [As expected],[2:15],
+[E4], [Deadline editted],  [Task deadline changed, schedule regenerated], [As expected],[0:53],
+[E5], [Duration editted to a non-zero value],  [Task duration changed, schedule regenerated], [As expected],[0:53],
+[E6], [Duration editted to a zero],  [Error appears saying tasks must have a duration], [Accepted the input and failed],[2:24],
+[E7], [Priority changed],  [Task priority changed, schedule regenerated], [Priority is no longer a feature],[-],
 )
 
 === Schedule Generation
-#table(columns: (auto, auto, auto, auto),
-[*No.*], [*Description*], [*Expected*], [*Outcome*],
-[G1], [Schedule generated with valid list of tasks],  [All tasks are scheduled to be completed before their deadline], [As expected],
-[G2], [Schedule generated with valid list of tasks],  [All tasks are scheduled to take their duration], [As expected],
-[G3], [Schedule generated with impossible list of tasks],  [Error raised about impossible task list], [As close to valid task list as possible is generated, we found this was more useful than just erroring],
-[G4], [Schedule generated with valid list of tasks],  [Tasks with higher priorities are often schedules before tasks with lower priorities], [Priority is no longer a feature],
+#table(columns: (auto, auto, auto, auto, auto),
+[*No.*], [*Description*], [*Expected*], [*Outcome*], [*Timestamp*],
+[G1], [Schedule generated with valid list of tasks],  [All tasks are scheduled to be completed before their deadline], [As expected],[1:16],
+[G2], [Schedule generated with valid list of tasks],  [All tasks are scheduled to take their duration], [As expected],[1:16],
+[G3], [Schedule generated with impossible list of tasks],  [Error raised about impossible task list], [As close to valid task list as possible is generated, we found this was more useful than just erroring],[1:16],
+[G4], [Schedule generated with valid list of tasks],  [Tasks with higher priorities are often schedules before tasks with lower priorities], [Priority is no longer a feature],[-],
 )
 
 And will that done, all tests have either passed or failed as expected meaning the product is complete! As well as this a few stakeholders and I used the website for a few days and ran in to no issues, the scheduling algorithm was a bit strange at times but thats something I can look at improving if I wanted to take this project further. 
