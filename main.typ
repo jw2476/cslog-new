@@ -2534,6 +2534,3 @@ The existing code should be easy to add to or modify as it is well-named, modula
 [Reminder notifications don't work on mobile], [This is likely a software bug so should be fixable easily, however this represents a larger issue that the app cannot send notifications unless it is open. Ideally the app would be used as a PWA(Progressive Web App) which would allow the user's schedule to be cached locally and reminder notifications can be queued meaning they will work without the app being open. This is a massive change to the entire site and would likely need a large rework],
 [Minor UI improvements], [With a few UI and styling tweaks some of the pages could be made easier to use, especially on mobile devices. This would likely be easy to implement since each page is stored in a standalone component] 
 )
-
-== TODO LIST:
-Implementation: Make validation really really obvious
